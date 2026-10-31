@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocalHire | Find Trusted Local Professionals</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/escrow.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <meta name="description" content="Connect with local workers like drivers, tutors, plumbers, and more instantly on LocalHire.">
+</head>
+<body>
+     <div id="navbar-container"></div>
+
+    <!-- Hero Section -->
+    <header style="padding: 6rem 0 4rem 0; text-align: center;">
+        <div class="container animate-fade-in flex flex-col items-center">
+            <h1 style="font-size: 3.5rem; letter-spacing: -0.05em; max-width: 800px; margin: 0 auto 1.5rem auto;">
+                Find trusted local professionals <span class="text-gradient">instantly</span>
+            </h1>
+            <p class="text-muted" style="font-size: 1.25rem; max-width: 600px; margin: 0 auto 3rem auto;">
+                Connect with highly-rated drivers, tutors, electricians, plumbers, and freelancers in your immediate area.
+            </p>
+            
+            <!-- Hero CTA — role-aware: populated by DOMContentLoaded script below -->
+            <div id="hero-cta" style="width: 100%; max-width: 750px; margin: 0 auto;"></div>
+        </div>
+    </header>
+
+    <!-- Map Section -->
+    <section class="container animate-fade-in" style="padding: 2rem 1.5rem; display: none;" id="map-section">
+        <div class="flex justify-between items-center" style="margin-bottom: 2rem;">
+            <div>
+                <h2>Workers Near You</h2>
+                <p class="text-muted" id="map-status">Locating nearby professionals...</p>
+            </div>
+        </div>
+        <div class="glass-card" style="padding: 0; overflow: hidden; border-radius: 16px;">
+            <div id="home-map" style="height: 400px; width: 100%; z-index: 10;"></div>
+        </div>
+    </section>
+
+    <!-- Smart Recommendations / Available Jobs Section (role-aware header injected by JS) -->
+    <section class="container" id="recommendations-section" style="padding: 4rem 1.5rem;">
+        <div class="flex justify-between items-center" style="margin-bottom: 2rem;" id="recommendations-header">
+            <!-- Header injected by DOMContentLoaded based on role -->
+        </div>
+        
+        <div id="recommended-workers" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Populated via JS -->
+        </div>
+    </section>
+
+    <!-- Recent Jobs Section -->
+    <section class="container" style="padding: 0 1.5rem 6rem 1.5rem;">
+        <div class="flex justify-between items-center" style="margin-bottom: 2rem;">
+            <div>
+                <h2>Recent Requests</h2>
+                <p class="text-muted">Looking for work? these jobs were just posted nearby.</p>
+            </div>
+            <a href="pages/jobs.html" style="color: var(--secondary); text-decoration: none; font-weight: 500;" class="flex items-center gap-1">
+                Browse jobs
+                <svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        </div>
+        
+        <div id="recent-jobs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Populated via JS -->
+        </div>
+    </section>
+
+    <footer style="margin-top: auto; border-top: 1px solid var(--border-light); padding: 2rem 0; text-align: center;">
+        <div class="container text-muted">
+            <p>&copy; 2026 LocalHire App. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="js/data.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/escrow.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Render Navbar
+            renderNavbar('navbar-container', 'index');
+
+            // ── Role detection ──────────────────────────────────────────────────────
+            const _homeUser = window.localHireApp.getCurrentUser();
+            const _isWorker = _homeUser && _homeUser.role === 'Worker';
+
+            // ── Hero CTA ────────────────────────────────────────────────────────────
+            const heroCta = document.getElementById('hero-cta');
+            if (heroCta) {
+                if (_isWorker) {
+                    // Workers: no search-workers form; direct them to available jobs
+                    heroCta.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 1.25rem; width: 100%;">
+                            <a href="pages/jobs.html" class="btn btn-primary" style="padding: 0.9rem 2.5rem; font-size: 1.1rem;">
+                                Browse Available Jobs
+                            </a>
+                            <p class="text-muted" style="margin: 0; font-size: 0.95rem;">
+                                Find work posted by customers near you.
+                            </p>
+                        </div>`;
+                } else {
+                    // Customers / guests: full search form + popular badges
+                    heroCta.innerHTML = `
+                        <div class="search-bar-container" style="width: 100%; position: relative;">
+                            <form action="pages/search.html" method="GET" class="flex items-center" style="gap: 0.5rem; width: 100%;">
+                                <div style="flex-grow: 1; position: relative;">
+                                    <svg class="icon text-muted" style="position: absolute; left: 1.25rem; top: 50%; transform: translateY(-50%);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <input type="text" name="q" placeholder="What service do you need? (e.g., Plumber, Math Tutor)" class="search-input" required>
+                                </div>
+                                <div class="search-divider"></div>
+                                <div style="min-width: 200px; position: relative;" class="hidden-mobile">
+                                    <svg class="icon text-muted" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    <input type="text" name="loc" placeholder="Your Location" class="search-input location-input">
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="padding: 0.8rem 2.25rem; flex-shrink: 0; box-shadow: none;">Search</button>
+                                <button type="button" id="btn-geolocate" class="btn btn-outline" title="Find Nearby" style="padding: 0.8rem; border-radius: 50%; aspect-ratio: 1; flex-shrink: 0; border: none; background: rgba(255,255,255,0.05);">
+                                    <svg class="icon" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                                </button>
+                            </form>
+                        </div>
+                        <div class="flex items-center justify-center gap-4 text-muted" style="margin-top: 2rem; flex-wrap: wrap;">
+                            <span>Popular:</span>
+                            <a href="pages/search.html?q=Plumber" class="badge hover:shadow" style="text-decoration: none;">Plumber</a>
+                            <a href="pages/search.html?q=Tutor" class="badge hover:shadow" style="text-decoration: none;">Math Tutor</a>
+                            <a href="pages/search.html?q=Electrician" class="badge hover:shadow" style="text-decoration: none;">Electrician</a>
+                            <a href="pages/search.html?q=Driver" class="badge hover:shadow" style="text-decoration: none;">Airport Driver</a>
+                            <a href="pages/search.html?q=Cleaner" class="badge hover:shadow" style="text-decoration: none;">House Cleaning</a>
+                        </div>`;
+                }
+            }
+
+            // ── Recommendations section header ──────────────────────────────────────
+            const recHeader = document.getElementById('recommendations-header');
+            if (recHeader) {
+                if (_isWorker) {
+                    recHeader.innerHTML = `
+                        <div>
+                            <h2>Recent Job Requests</h2>
+                            <p class="text-muted">Jobs posted by customers that match your skills.</p>
+                        </div>
+                        <a href="pages/jobs.html" style="color: var(--secondary); text-decoration: none; font-weight: 500;" class="flex items-center gap-1">
+                            See all jobs
+                            <svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </a>`;
+                } else {
+                    recHeader.innerHTML = `
+                        <div>
+                            <h2>Smart Recommendations</h2>
+                            <p class="text-muted">Top-rated professionals available near you right now.</p>
+                        </div>
+                        <a href="pages/search.html" style="color: var(--primary); text-decoration: none; font-weight: 500;" class="flex items-center gap-1">
+                            See all
+                            <svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </a>`;
+                }
+            }
+
+            // ── Render Recommended Workers / Job Requests (Top 3) ──────────────────
+            const recommendedContainer = document.getElementById('recommended-workers');
+            if (_isWorker) {
+                // Workers: show recent job requests in the recommendations slot
+                if (recommendedContainer) recommendedContainer.innerHTML = '';
+                // Jobs are also rendered in the dedicated section below; skip duplicating here
+            } else {
+                // Customers / guests: show top-rated worker cards
+                const workersList = await window.localHireAPI.getWorkers();
+                if (recommendedContainer && workersList) {
+                    recommendedContainer.innerHTML = '';
+                    const topWorkers = [...workersList]
+                        .sort((a, b) => b.rating - a.rating)
+                        .slice(0, 3);
+                    topWorkers.forEach(worker => {
+                        recommendedContainer.innerHTML += createWorkerCard(worker, 'index');
+                    });
+                }
+            }
+
+            // ── Render Recent Jobs (Top 3) — visible to all ─────────────────────────
+            const jobsList = await window.localHireAPI.getJobs();
+            const jobsContainer = document.getElementById('recent-jobs');
+            if (jobsContainer && jobsList) {
+                jobsContainer.innerHTML = '';
+                jobsList.slice(0, 3).forEach(job => {
+                    jobsContainer.innerHTML += createJobCard(job);
+                });
+            }
+
+            // ── Map and Geolocation Logic (Customer/guest only — btn may not exist) ──
+            const mapSection = document.getElementById('map-section');
+            const mapStatus = document.getElementById('map-status');
+            let homeMap = null;
+            let markerLayer = null;
+
+            async function initMap(lat, lng) {
+                mapSection.style.display = 'block';
+                mapStatus.textContent = 'Found professionals in your area.';
+                
+                // Refresh workers to get updated distances
+                const workers = await window.localHireAPI.getWorkers();
+
+                if (!homeMap) {
+                    homeMap = L.map('home-map').setView([lat, lng], 12);
+                    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    }).addTo(homeMap);
+                    
+                    markerLayer = L.layerGroup().addTo(homeMap);
+                } else {
+                    homeMap.setView([lat, lng], 12);
+                    markerLayer.clearLayers();
+                }
+
+                // Add User Marker
+                const userIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: var(--primary); width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
+                L.marker([lat, lng], {icon: userIcon}).bindPopup('<b>You are here</b>').addTo(markerLayer);
+
+                // Add Worker Markers
+                (workers || []).forEach(worker => {
+                    const wLat = worker.lat || (worker.location && worker.location.coordinates ? worker.location.coordinates[1] : null);
+                    const wLng = worker.lng || (worker.location && worker.location.coordinates ? worker.location.coordinates[0] : null);
+                    const locText = typeof worker.location === 'string' ? worker.location : (worker.location && worker.location.address ? worker.location.address : 'Nearby');
+
+                    if (wLat && wLng) {
+                        const marker = L.marker([wLat, wLng]).addTo(markerLayer);
+                        
+                        const popupContent = `
+                            <div style="min-width: 200px; display: flex; flex-direction: column; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <img src="${worker.avatarUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                                    <div>
+                                        <h4 style="margin: 0; font-size: 14px;">${worker.name}</h4>
+                                        <span style="font-size: 12px; color: #666;">${worker.category} • ${worker.rating}★</span>
+                                    </div>
+                                </div>
+                                <div style="font-size: 12px; color: #444;">Location: ${locText}</div>
+                                <a href="pages/profile.html?id=${worker.id || worker._id}" style="display: block; width: 100%; text-align: center; background: var(--primary); color: white; padding: 6px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; margin-top: 5px;">View Profile</a>
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent);
+                    }
+                });
+            }
+
+            // Check if user already granted location previously
+            const savedLoc = window.localHireApp.getUserLocation();
+            if (savedLoc) {
+                // Determine if cache is fresh (e.g., < 1 hour)
+                const isFresh = (Date.now() - savedLoc.timestamp) < (60 * 60 * 1000);
+                if (isFresh) {
+                     initMap(savedLoc.lat, savedLoc.lng);
+                }
+            }
+
+            // btn-geolocate is only in the DOM for Customers (it's inside the injected hero CTA)
+            // Use event delegation so we don't crash if it's absent
+            document.addEventListener('click', (e) => {
+                const btnGeolocate = e.target.closest('#btn-geolocate');
+                if (!btnGeolocate) return;
+
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not supported by your browser.');
+                    return;
+                }
+
+                btnGeolocate.innerHTML = `<svg class="icon animate-spin" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>`; // rudimentary spinner
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        btnGeolocate.innerHTML = `<svg class="icon text-primary" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`;
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        window.localHireApp.setUserLocation(lat, lng);
+                        await initMap(lat, lng);
+                        
+                        // Re-render recommendations to reflect new distances (Customers only)
+                        if (!_isWorker && recommendedContainer) {
+                            recommendedContainer.innerHTML = '';
+                            const updatedWorkers = await window.localHireAPI.getWorkers();
+                            (updatedWorkers || [])
+                                .sort((a, b) => b.rating - a.rating)
+                                .slice(0, 3)
+                                .forEach(worker => {
+                                    recommendedContainer.innerHTML += createWorkerCard(worker, 'index');
+                                });
+                        }
+                    },
+                    (error) => {
+                        btnGeolocate.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`;
+                        console.error("Error getting location:", error);
+                        // Fallback to a default central location (e.g. Belagavi Center) if they deny it but still want to see the map
+                        const defaultLat = 15.8497;
+                        const defaultLng = 74.4977;
+                        window.localHireApp.setUserLocation(defaultLat, defaultLng);
+                        alert("Could not access your location. Showing default city area (Belagavi).");
+                        initMap(defaultLat, defaultLng);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            });
+
+        });
+    </script>
+</body>
+</html>
+

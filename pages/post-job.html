@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post a Job | LocalHire</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div class="container" style="padding: 3rem 1.5rem; max-width: 800px;">
+        <h2 style="font-size: 2.2rem; margin-bottom: 0.5rem;">Post a New Request</h2>
+        <p class="text-muted" style="margin-bottom: 2rem;">Describe what you need done, and workers in your area will apply.</p>
+
+        <div class="glass-card animate-fade-in" style="padding: 2.5rem;">
+            <form id="post-job-form">
+                
+                <div class="input-group" style="margin-bottom: 1.5rem;">
+                    <label class="input-label">Job Title</label>
+                    <input type="text" id="job-title" class="input-control" placeholder="E.g., Need someone to fix a leaking pipe" required>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6" style="margin-bottom: 1.5rem;">
+                    <div class="input-group">
+                        <label class="input-label">Category</label>
+                        <select id="job-category" class="input-control" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%2394a3b8%22 viewBox=%220 0 24 24%22 width=%2224%22 height=%2224%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position: right 1rem center;">
+                            <option value="" disabled selected>Select category</option>
+                            <option value="Plumber">Plumber</option>
+                            <option value="Electrician">Electrician</option>
+                            <option value="Tutor">Tutor</option>
+                            <option value="Cleaner">Cleaner</option>
+                            <option value="Driver">Driver</option>
+                            <option value="Freelancer">Freelancer</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label class="input-label">Budget Range</label>
+                        <input type="text" id="job-budget" class="input-control" placeholder="E.g., $50 - $100 or $30/hr" required>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6" style="margin-bottom: 1.5rem;">
+                    <div class="input-group">
+                        <label class="input-label">Job Location</label>
+                        <input type="text" id="job-location" class="input-control" placeholder="E.g., Downtown or Remote" required>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label class="input-label">Urgency</label>
+                        <select id="job-urgency" class="input-control" required style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%2394a3b8%22 viewBox=%220 0 24 24%22 width=%2224%22 height=%2224%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position: right 1rem center;">
+                            <option value="Flexible" selected>Flexible</option>
+                            <option value="This week">This week</option>
+                            <option value="Today">Today</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 2rem;">
+                    <label class="input-label">Job Description</label>
+                    <textarea id="job-description" class="input-control" rows="5" placeholder="Provide as much detail as possible about the job..." required style="resize: vertical;"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-4">
+                    <button type="button" class="btn btn-outline" onclick="window.location.href='../index.html'">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 0.8rem 2rem;">Post Job Now</button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="glass-card animate-fade-in" style="text-align: center; max-width: 400px; padding: 3rem 2rem;">
+            <svg class="icon" style="color: var(--success); width: 64px; height: 64px; margin: 0 auto 1.5rem auto;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <h2>Job Posted!</h2>
+            <p class="text-muted" style="margin-bottom: 2rem;">Your request has been published. Local workers will be able to see it and apply soon.</p>
+            <a href="my-jobs.html" class="btn btn-primary">View My Jobs</a>
+        </div>
+    </div>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNavbar('navbar-container', 'pages');
+
+            const form = document.getElementById('post-job-form');
+            const modal = document.getElementById('success-modal');
+
+            const user = window.localHireApp.getCurrentUser();
+            if (!user) {
+                window.location.href = 'auth.html';
+                return;
+            }
+
+            if (user.role === 'Worker') {
+                alert("Only Customers can post jobs right now. You can apply to jobs from the search page!");
+                window.location.href = '../index.html';
+                return;
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                // Build job object
+                const title = document.getElementById('job-title').value;
+                const category = document.getElementById('job-category').value;
+                const budget = document.getElementById('job-budget').value;
+                const location = document.getElementById('job-location').value;
+                const urgency = document.getElementById('job-urgency').value;
+                const description = document.getElementById('job-description').value;
+
+                const user = window.localHireApp.getCurrentUser();
+
+                const newJob = {
+                    title,
+                    category,
+                    budget,
+                    location,
+                    urgency,
+                    description,
+                    customerName: user.name,
+                    customerId: user.id
+                };
+
+                await window.localHireAPI.saveJob(newJob);
+
+                // Show success modal
+                modal.style.display = 'flex';
+            });
+        });
+    </script>
+</body>
+</html>

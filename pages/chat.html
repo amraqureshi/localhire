@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages | LocalHire</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .chat-container {
+            display: flex;
+            height: calc(100vh - 120px);
+            gap: 1.5rem;
+            padding: 1.5rem;
+        }
+        .chat-sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto;
+        }
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .msg-bubble {
+            max-width: 70%;
+            padding: 0.85rem 1.25rem;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .msg-mine {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #1e293b;
+            border-bottom-right-radius: 4px;
+            font-weight: 500;
+        }
+        .msg-other {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+            border: 1px solid var(--border-light);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div class="container" style="max-width: 1200px;">
+        <div class="chat-container">
+            <!-- Sidebar: Active Conversations -->
+            <div class="glass-card chat-sidebar">
+                <h3 style="margin-bottom: 0.5rem; font-size: 1.2rem;">Messages</h3>
+                <div id="conversations-list" class="flex flex-col gap-2">
+                    <p class="text-muted" style="font-size: 0.9rem; text-align: center; padding: 2rem 0;">Select a worker or customer from their profile to start chatting.</p>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="glass-card chat-main" style="padding: 0;">
+                <div class="flex items-center justify-between" style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-light);">
+                    <div class="flex items-center gap-3">
+                        <div id="chat-avatar-placeholder" style="width: 42px; height: 42px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #1e293b;">?</div>
+                        <div>
+                            <h4 id="chat-header-name" style="margin: 0; font-size: 1.1rem;">Direct Conversation</h4>
+                            <span id="chat-header-status" class="text-muted" style="font-size: 0.8rem;">Online</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="messages-container">
+                    <div style="text-align: center; color: var(--text-muted); margin: auto;">
+                        <svg class="icon" style="width: 48px; height: 48px; margin-bottom: 0.5rem;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <p>No active message thread selected.</p>
+                    </div>
+                </div>
+
+                <!-- Input Box -->
+                <form id="chat-form" class="flex gap-2" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-light); background: rgba(255, 255, 255, 0.4);">
+                    <input type="text" id="chat-input" class="input-control" placeholder="Type a message..." required style="border-radius: 9999px; padding-left: 1.25rem;">
+                    <button type="submit" class="btn btn-primary" style="border-radius: 50%; aspect-ratio: 1; padding: 0.8rem; flex-shrink: 0;">
+                        <svg class="icon" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/app.js"></script>
+    <script src="../js/api.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderNavbar('navbar-container', 'pages');
+
+            let currentUser = window.localHireApp.getCurrentUser();
+            if (!currentUser) {
+                const sessionUser = await window.localHireAPI.getMe();
+                currentUser = sessionUser;
+            }
+
+            if (!currentUser) {
+                window.location.href = 'auth.html';
+                return;
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetUserId = urlParams.get('userId');
+
+            const messagesContainer = document.getElementById('messages-container');
+            const chatForm = document.getElementById('chat-form');
+            const chatInput = document.getElementById('chat-input');
+            const headerName = document.getElementById('chat-header-name');
+            const avatarPlaceholder = document.getElementById('chat-avatar-placeholder');
+
+            let socket = null;
+            let currentRoom = null;
+
+            const renderMessage = (message) => {
+                const isMine = String(message.sender) === String(currentUser.id) || String(message.senderId) === String(currentUser.id);
+                const bubble = document.createElement('div');
+                bubble.className = `msg-bubble ${isMine ? 'msg-mine' : 'msg-other'}`;
+                bubble.textContent = message.content;
+                messagesContainer.appendChild(bubble);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            };
+
+            const loadHistory = async () => {
+                if (!targetUserId) {
+                    messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>Select a customer or worker to continue the conversation.</p></div>';
+                    return;
+                }
+
+                const result = await window.localHireAPI.getMessages(targetUserId);
+                if (!result.success) {
+                    messagesContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>${result.message || 'Unable to load chat history.'}</p></div>`;
+                    return;
+                }
+
+                messagesContainer.innerHTML = '';
+                if (!result.messages.length) {
+                    messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>No messages yet. Start the conversation.</p></div>';
+                    return;
+                }
+
+                result.messages.forEach(renderMessage);
+            };
+
+            try {
+                const token = window.sessionStorage ? window.sessionStorage.getItem('localHire_token') : null;
+                if (token) {
+                    socket = io('http://localhost:5000', {
+                        auth: { token: `Bearer ${token}` }
+                    });
+                    socket.on('connect', () => console.log('Connected to chat socket'));
+                    socket.on('receive_message', (data) => {
+                        if (data && data.roomId === currentRoom) {
+                            renderMessage(data);
+                        }
+                    });
+                    socket.on('chat:error', (data) => {
+                        if (data && data.message) {
+                            alert(data.message);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('Socket server offline');
+            }
+
+            if (targetUserId) {
+                const targetUser = { name: 'User', avatarUrl: '' };
+                headerName.textContent = targetUser.name;
+                currentRoom = [currentUser.id, targetUserId].sort().join('_');
+
+                if (socket) {
+                    socket.emit('join_room', currentRoom);
+                }
+
+                await loadHistory();
+            }
+
+            chatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const text = chatInput.value.trim();
+                if (!text || !targetUserId) return;
+
+                if (socket && currentRoom) {
+                    socket.emit('send_message', {
+                        roomId: currentRoom,
+                        content: text
+                    });
+                } else {
+                    const result = await window.localHireAPI.sendMessage(targetUserId, text);
+                    if (result.success) {
+                        renderMessage(result.message);
+                    } else {
+                        alert(result.message || 'Unable to send message.');
+                    }
+                }
+
+                chatInput.value = '';
+            });
+        });
+    </script>
+</body>
+</html>

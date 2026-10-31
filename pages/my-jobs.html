@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Jobs | LocalHire</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/escrow.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div class="container" style="padding: 3rem 1.5rem;">
+        
+        <div class="flex items-center justify-between" style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-light); padding-bottom: 1.5rem;">
+            <div>
+                <h2>My Dashboard</h2>
+                <p class="text-muted">Manage jobs and saved workers.</p>
+            </div>
+            <a href="post-job.html" class="btn btn-primary" id="btn-post" style="display: none;">Post New Job</a>
+        </div>
+
+        <!-- Dashboard Tabs -->
+        <div class="flex gap-4" style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-light);" id="tab-container">
+            <button id="tab-myjobs" class="btn" style="background: transparent; border-radius: 0; padding: 0.75rem 0; border-bottom: 2px solid var(--primary); color: var(--text-main);">My Jobs</button>
+            <button id="tab-saved" class="btn text-muted" style="background: transparent; border-radius: 0; padding: 0.75rem 0; font-weight: 500;">Saved Workers</button>
+            <button id="tab-apps" class="btn text-muted" style="display: none; background: transparent; border-radius: 0; padding: 0.75rem 0; font-weight: 500;">Applications</button>
+            <button id="tab-profile-photo" class="btn text-muted" style="background: transparent; border-radius: 0; padding: 0.75rem 0; font-weight: 500;">Profile Photo</button>
+        </div>
+
+        <!-- Views -->
+        <div id="view-myjobs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Jobs populated via JS -->
+        </div>
+
+        <div id="view-saved" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" style="display: none;">
+            <!-- Saved workers populated via JS -->
+        </div>
+
+        <div id="view-apps" style="display: none; padding: 1rem 0;">
+            <!-- Applications populated via JS -->
+            <div id="apps-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            
+            <div id="no-apps" style="display: none; text-align: center; padding: 4rem 2rem;" class="glass-card">
+                <svg class="icon text-muted" style="width: 48px; height: 48px; margin: 0 auto 1rem auto;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <h3>No applications yet</h3>
+                <p class="text-muted">Jobs you apply to will show up here.</p>
+                <a href="jobs.html" class="btn btn-primary" style="margin-top: 1rem;">Browse Jobs</a>
+            </div>
+        </div>
+
+        <!-- Profile Photo Management View (Both Customer & Worker) -->
+        <div id="view-profile-photo" style="display: none; padding: 1rem 0;">
+            <div class="glass-card flex flex-col gap-6" style="max-width: 600px; margin: 0 auto; padding: 2.5rem;">
+                <div class="flex items-center gap-6 flex-wrap">
+                    <div style="width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid var(--primary); background: var(--bg-dark); flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                        <img id="dash-avatar-preview" src="" alt="Profile Photo" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                        <div id="dash-avatar-placeholder" style="font-size: 2.5rem; font-weight: bold; color: var(--primary);">?</div>
+                    </div>
+                    <div>
+                        <h3 style="margin-bottom: 0.25rem;">Your Profile Photo</h3>
+                        <p class="text-muted" style="font-size: 0.85rem;">Upload a personal profile picture (JPG, PNG, or WebP, max 5 MB).</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 items-center flex-wrap" style="padding-top: 1rem; border-top: 1px solid var(--border-light);">
+                    <label for="dash-avatar-input" class="btn btn-outline" style="cursor: pointer; padding: 0.6rem 1.25rem; font-size: 0.9rem;">
+                        <svg class="icon" viewBox="0 0 24 24" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        Choose Photo
+                    </label>
+                    <input type="file" id="dash-avatar-input" accept="image/jpeg,image/png,image/webp,image/jpg" style="display: none;">
+
+                    <button type="button" id="dash-btn-upload" class="btn btn-primary" style="display: none; padding: 0.6rem 1.25rem; font-size: 0.9rem;">
+                        Upload to Supabase
+                    </button>
+                    <button type="button" id="dash-btn-cancel" class="btn btn-outline" style="display: none; padding: 0.6rem 1rem; font-size: 0.9rem;">
+                        Cancel
+                    </button>
+                    <button type="button" id="dash-btn-remove" class="btn btn-outline" style="display: none; padding: 0.6rem 1rem; font-size: 0.9rem; color: #ef4444; border-color: rgba(239,68,68,0.4);">
+                        Remove Photo
+                    </button>
+                </div>
+
+                <p id="dash-avatar-msg" style="display: none; font-size: 0.85rem; margin-top: 0.5rem;"></p>
+            </div>
+        </div>
+
+        <!-- Customer Applications Modal -->
+        <div id="customer-apps-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+            <div class="glass-card animate-fade-in flex flex-col" style="width: 100%; max-width: 600px; max-height: 80vh; padding: 2.5rem;">
+                <div class="flex justify-between items-start" style="margin-bottom: 1.5rem; flex-shrink: 0;">
+                    <h3 style="margin: 0; font-size: 1.5rem;">Quotes Received</h3>
+                    <button type="button" class="btn" id="close-customer-apps" style="padding: 0; background: transparent; color: var(--text-muted);">&times;</button>
+                </div>
+                
+                <p id="modal-job-title" style="font-weight: 500; margin-bottom: 1.5rem; flex-shrink: 0;"></p>
+
+                <div id="modal-apps-list" style="overflow-y: auto; flex-grow: 1; padding-right: 0.5rem;" class="flex flex-col gap-4">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/app.js"></script>
+    <script src="../js/escrow.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderNavbar('navbar-container', 'pages');
+
+            const user = window.localHireApp.getCurrentUser();
+            if (!user) {
+                window.location.href = 'auth.html';
+                return;
+            }
+
+            const trackingSockets = new Map();
+            const trackingMaps = new Map(); // Leaflet map instances keyed by bookingId
+
+            function updateTrackingCard(bookingId, text, badgeText = 'Live') {
+                const statusEl = document.querySelector(`[data-tracking-status="${bookingId}"]`);
+                const badgeEl = document.querySelector(`[data-tracking-badge="${bookingId}"]`);
+                if (statusEl) statusEl.textContent = text;
+                if (badgeEl) {
+                    badgeEl.textContent = badgeText;
+                    badgeEl.style.background = badgeText === 'Live' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.12)';
+                    badgeEl.style.color = badgeText === 'Live' ? '#4ade80' : 'var(--text-muted)';
+                }
+            }
+
+            function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+                if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+                const nLat1 = Number(lat1);
+                const nLon1 = Number(lon1);
+                const nLat2 = Number(lat2);
+                const nLon2 = Number(lon2);
+                if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return null;
+                const R = 6371;
+                const dLat = (nLat2 - nLat1) * Math.PI / 180;
+                const dLon = (nLon2 - nLon1) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos(nLat1 * Math.PI / 180) * Math.cos(nLat2 * Math.PI / 180) *
+                          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            function updateTrackingMap(bookingId, lat, lng, workerLabel = 'Worker', custLat = null, custLng = null) {
+                const mapContainer = document.getElementById(`tracking-map-${bookingId}`);
+                if (!mapContainer || !window.L) return;
+                mapContainer.style.display = 'block';
+
+                let mapData = trackingMaps.get(bookingId);
+                const hasCustCoords = custLat != null && custLng != null && !isNaN(Number(custLat)) && !isNaN(Number(custLng));
+
+                if (!mapData) {
+                    const map = L.map(mapContainer).setView([lat, lng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap'
+                    }).addTo(map);
+
+                    const marker = L.marker([lat, lng]).addTo(map)
+                        .bindPopup(`📍 <b>${escapeHTML(workerLabel)}</b><br>Live GPS Location`)
+                        .openPopup();
+
+                    let customerMarker = null;
+                    if (hasCustCoords) {
+                        customerMarker = L.circleMarker([Number(custLat), Number(custLng)], {
+                            radius: 8,
+                            color: '#2563eb',
+                            fillColor: '#3b82f6',
+                            fillOpacity: 0.9,
+                            weight: 2
+                        }).addTo(map).bindPopup('🏠 <b>Service Location</b>');
+                        try {
+                            map.fitBounds(L.latLngBounds([[lat, lng], [Number(custLat), Number(custLng)]]).pad(0.25));
+                        } catch (err) {}
+                    }
+
+                    trackingMaps.set(bookingId, { map, marker, customerMarker });
+                    setTimeout(() => map.invalidateSize(), 200);
+                } else {
+                    mapData.marker.setLatLng([lat, lng]);
+                    if (hasCustCoords) {
+                        if (!mapData.customerMarker) {
+                            mapData.customerMarker = L.circleMarker([Number(custLat), Number(custLng)], {
+                                radius: 8,
+                                color: '#2563eb',
+                                fillColor: '#3b82f6',
+                                fillOpacity: 0.9,
+                                weight: 2
+                            }).addTo(mapData.map).bindPopup('🏠 <b>Service Location</b>');
+                        } else {
+                            mapData.customerMarker.setLatLng([Number(custLat), Number(custLng)]);
+                        }
+                        try {
+                            mapData.map.fitBounds(L.latLngBounds([[lat, lng], [Number(custLat), Number(custLng)]]).pad(0.25));
+                        } catch (err) {
+                            mapData.map.panTo([lat, lng]);
+                        }
+                    } else {
+                        mapData.map.panTo([lat, lng]);
+                    }
+                }
+            }
+
+            function ensureTrackingSocket(bookingId, role, handlers = {}) {
+                const key = `${role}:${bookingId}`;
+                if (trackingSockets.has(key)) {
+                    const socket = trackingSockets.get(key);
+                    if (handlers.onState && socket) {
+                        socket.off('tracking:state', handlers.onState);
+                        socket.off('tracking:location', handlers.onLocation);
+                        socket.off('worker:location:changed', handlers.onLocation);
+                        socket.off('booking:status:changed', handlers.onStatusChanged);
+                        socket.off('tracking:stopped', handlers.onStopped);
+                        socket.off('tracking:error', handlers.onError);
+                    }
+                    socket.on('tracking:state', handlers.onState || (() => {}));
+                    socket.on('tracking:location', handlers.onLocation || (() => {}));
+                    socket.on('worker:location:changed', handlers.onLocation || (() => {}));
+                    socket.on('booking:status:changed', handlers.onStatusChanged || (() => {}));
+                    socket.on('tracking:stopped', handlers.onStopped || (() => {}));
+                    socket.on('tracking:error', handlers.onError || (() => {}));
+                    return socket;
+                }
+
+                const socket = window.localHireAPI && window.localHireAPI.tracking ? window.localHireAPI.tracking.connect(bookingId, handlers) : null;
+                if (!socket) return null;
+                trackingSockets.set(key, socket);
+                return socket;
+            }
+
+            // Helper to render booking cards
+            function createBookingCard(booking, role) {
+                const isWorker = role === 'Worker';
+                const otherPerson = isWorker ? booking.customer : booking.worker;
+                const rawName = otherPerson ? otherPerson.name : (isWorker ? 'Customer' : 'Professional');
+                const otherName = escapeHTML(rawName);
+                const otherAvatar = otherPerson && otherPerson.avatarUrl ? escapeHTML(otherPerson.avatarUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(rawName)}`;
+                const scheduledDate = escapeHTML(new Date(booking.scheduledAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }));
+                const isTrackingStatus = ['CONFIRMED', 'DISPATCHED', 'IN_PROGRESS'].includes(booking.status);
+                const safeBookingNumber = escapeHTML(booking.bookingNumber || 'BK-DIRECT');
+                const safeTimeSlot = escapeHTML(booking.timeSlot || 'Flexible');
+                const safeAgreedPrice = Number(booking.agreedPrice || 0);
+                const safeSubtitle = isWorker
+                    ? (booking.customer && booking.customer.email ? escapeHTML(booking.customer.email) : 'Verified Customer')
+                    : (booking.worker && booking.worker.category ? escapeHTML(booking.worker.category) : 'Service Professional');
+                
+                let badgeClass = 'badge';
+                let statusLabel = booking.status;
+                if (booking.status === 'REQUESTED') {
+                    badgeClass = 'badge';
+                    statusLabel = 'Requested';
+                } else if (booking.status === 'CONFIRMED') {
+                    badgeClass = 'badge-primary';
+                    statusLabel = 'Confirmed';
+                } else if (booking.status === 'DISPATCHED') {
+                    badgeClass = 'badge-primary';
+                    statusLabel = 'On The Way';
+                } else if (booking.status === 'IN_PROGRESS') {
+                    badgeClass = 'badge-primary';
+                    statusLabel = 'In Progress';
+                } else if (booking.status === 'AWAITING_CUSTOMER_CONFIRMATION') {
+                    badgeClass = 'badge';
+                    statusLabel = 'Awaiting Customer Confirmation';
+                } else if (booking.status === 'COMPLETED') {
+                    badgeClass = 'badge';
+                    statusLabel = 'Completed';
+                } else if (booking.status === 'CANCELLED') {
+                    badgeClass = 'badge';
+                    statusLabel = 'Cancelled';
+                }
+
+                let actionButtons = '';
+                if (isWorker) {
+                    if (booking.status === 'REQUESTED') {
+                        actionButtons = `
+                            <div class="flex gap-2" style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="CONFIRMED" style="flex: 1; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    Accept Booking
+                                </button>
+                                <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="CANCELLED" style="padding: 0.5rem 1rem; font-size: 0.85rem; color: var(--danger); border-color: var(--danger);">
+                                    Decline
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'CONFIRMED') {
+                        actionButtons = `
+                            <div class="flex gap-2" style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="DISPATCHED" style="flex: 1; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    🚗 On The Way
+                                </button>
+                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="IN_PROGRESS" style="flex: 1; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    ▶️ Start Service
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'DISPATCHED') {
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="IN_PROGRESS" style="width: 100%; padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    ▶️ Start Service (Arrived)
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'IN_PROGRESS') {
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="COMPLETED" style="width: 100%; padding: 0.5rem 1rem; font-size: 0.85rem; background: #22c55e; border-color: #22c55e;">
+                                    Mark Complete
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'AWAITING_CUSTOMER_CONFIRMATION') {
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <div class="text-muted" style="font-size: 0.8rem; text-align: center;">Awaiting customer confirmation</div>
+                            </div>
+                        `;
+                    } else if (booking.status === 'COMPLETED') {
+                        const isPaid = booking.payment && booking.payment.status === 'RELEASED_TO_WORKER';
+                        if (isPaid) {
+                            const methodLabel = booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI');
+                            actionButtons = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
+                                    <div class="escrow-badge escrow-released" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
+                                        💰 Payment Received: ₹${booking.payment.totalAmount} via ${methodLabel}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            actionButtons = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
+                                    <div class="escrow-badge escrow-held" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
+                                        ⏳ Service Complete — Awaiting Customer Escrow Release
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    if (booking.status === 'REQUESTED' || booking.status === 'CONFIRMED' || booking.status === 'DISPATCHED') {
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; text-align: right;">
+                                <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="CANCELLED" style="padding: 0.45rem 1rem; font-size: 0.8rem; color: var(--danger); border-color: var(--danger);">
+                                    Cancel Booking
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'IN_PROGRESS') {
+                        const wName = escapeHTML(booking.worker ? (booking.worker.name || 'Worker') : 'Worker');
+                        const wAmount = Number(booking.agreedPrice || 0);
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <div class="escrow-badge escrow-held" style="align-self: flex-start; font-size: 0.8rem;">🔔 Service in progress / Worker on-site</div>
+                                <button class="btn btn-primary btn-release-escrow"
+                                    data-booking-id="${booking.id}"
+                                    data-worker-name="${wName}"
+                                    data-amount="${wAmount}"
+                                    style="width: 100%; padding: 0.6rem 1rem; font-size: 0.9rem; background: #22c55e; border-color: #22c55e; font-weight: 600;">
+                                    ✅ Approve &amp; Release Payment (UPI / Cash)
+                                </button>
+                                <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="CANCELLED" style="padding: 0.45rem 1rem; font-size: 0.8rem; color: var(--danger); border-color: var(--danger);">
+                                    Dispute / Cancel
+                                </button>
+                            </div>
+                        `;
+                    } else if (booking.status === 'COMPLETED') {
+                        const wName = escapeHTML(booking.worker ? (booking.worker.name || 'Worker') : 'Worker');
+                        const wAmount = Number(booking.agreedPrice || 0);
+                        const isPaid = booking.payment && booking.payment.status === 'RELEASED_TO_WORKER';
+                        if (isPaid) {
+                            const methodLabel = booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI');
+                            actionButtons = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
+                                    <div class="escrow-badge escrow-released" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
+                                        ✅ Payment Released (₹${booking.payment.totalAmount} via ${methodLabel})
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            actionButtons = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <div class="escrow-badge escrow-held" style="align-self: flex-start; font-size: 0.8rem;">🔔 Service Completed — Release Escrow Payment</div>
+                                    <button class="btn btn-primary btn-release-escrow"
+                                        data-booking-id="${booking.id}"
+                                        data-worker-name="${wName}"
+                                        data-amount="${wAmount}"
+                                        style="width: 100%; padding: 0.6rem 1rem; font-size: 0.9rem; background: #22c55e; border-color: #22c55e; font-weight: 600;">
+                                        💸 Release Payment to Worker (UPI / Cash)
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+
+                const custLat = (booking.address && booking.address.latitude) ? booking.address.latitude : null;
+                const custLng = (booking.address && booking.address.longitude) ? booking.address.longitude : null;
+
+                const trackingWidget = isTrackingStatus ? `
+                    <div class="tracking-container" data-booking-id="${booking.id}" data-cust-lat="${custLat != null ? custLat : ''}" data-cust-lng="${custLng != null ? custLng : ''}" style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                        <div class="flex items-center justify-between" style="margin-bottom: 0.5rem;">
+                            <span class="text-muted" style="font-size: 0.8rem;">📍 Live GPS Tracking</span>
+                            <span class="badge" data-tracking-badge="${booking.id}" style="font-size: 0.72rem;">Waiting</span>
+                        </div>
+                        <div id="tracking-map-${booking.id}" style="width: 100%; height: 220px; border-radius: 8px; display: none; margin-bottom: 0.5rem; border: 1px solid var(--border-light);"></div>
+                        <div class="text-muted" data-tracking-status="${booking.id}" style="font-size: 0.8rem; line-height: 1.5; min-height: 1.5em;">
+                            ${isWorker ? 'Start live GPS sharing when you depart or arrive.' : 'Waiting for the worker to share live GPS location.'}
+                        </div>
+                        <button class="btn ${isWorker ? 'btn-primary' : 'btn-outline'} tracking-action-btn" data-booking-id="${booking.id}" data-role="${role}" data-mode="${isWorker ? 'start' : 'subscribe'}" style="width: 100%; margin-top: 0.75rem; padding: 0.6rem 1rem; font-size: 0.8rem;">
+                            ${isWorker ? 'Start Live Tracking' : 'View live location'}
+                        </button>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="glass-card flex-col gap-4 animate-fade-in" style="border: 1px solid var(--border-light);">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span style="font-family: monospace; font-size: 0.8rem; color: var(--primary); font-weight: 700;">${safeBookingNumber}</span>
+                                <h4 style="margin: 0.25rem 0 0 0; font-size: 1.1rem; color: var(--text-main);">${isWorker ? 'Booking from ' + otherName : 'Hired ' + otherName}</h4>
+                            </div>
+                            <span class="${badgeClass}" style="white-space: nowrap;">${statusLabel}</span>
+                        </div>
+
+                        <div class="flex items-center gap-3" style="padding: 0.5rem 0;">
+                            <img src="${otherAvatar}" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover;">
+                            <div style="font-size: 0.85rem; line-height: 1.4;">
+                                <strong style="color: var(--text-main); display: block;">${otherName}</strong>
+                                <span class="text-muted">${safeSubtitle}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-2" style="font-size: 0.85rem; background: rgba(0,0,0,0.03); padding: 0.75rem; border-radius: 8px;">
+                            <div class="flex items-center gap-2 text-muted">
+                                <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                <span><strong>Date:</strong> ${scheduledDate} (${safeTimeSlot})</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-muted">
+                                <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                <span><strong>Agreed Rate:</strong> <strong style="color: var(--text-main);">₹${safeAgreedPrice}</strong></span>
+                            </div>
+                        </div>
+
+                        ${trackingWidget}
+                        ${actionButtons}
+                    </div>
+                `;
+            }
+
+            // UI Elements
+            const btnPost = document.getElementById('btn-post');
+            const tabMyJobs = document.getElementById('tab-myjobs');
+            const tabSaved = document.getElementById('tab-saved');
+            const tabApps = document.getElementById('tab-apps');
+            const tabProfilePhoto = document.getElementById('tab-profile-photo');
+            const viewMyJobs = document.getElementById('view-myjobs');
+            const viewSaved = document.getElementById('view-saved');
+            const viewApps = document.getElementById('view-apps');
+            const viewProfilePhoto = document.getElementById('view-profile-photo');
+
+            // Role specific logic
+            if (user.role === 'Customer') {
+                btnPost.style.display = 'inline-flex';
+                tabSaved.style.display = 'inline-block';
+                tabApps.style.display = 'none';
+            } else if (user.role === 'Worker') {
+                btnPost.style.display = 'none';
+                tabSaved.style.display = 'none';
+                tabMyJobs.textContent = 'Active Contracts';
+                tabApps.style.display = 'inline-block';
+            }
+
+            // Tab Switching Logic
+            function setActiveTab(tabBtn, viewDiv) {
+                [tabMyJobs, tabSaved, tabApps, tabProfilePhoto].forEach(t => {
+                    if (t) {
+                        t.style.borderBottom = 'none';
+                        t.style.color = 'var(--text-muted)';
+                    }
+                });
+                tabBtn.style.borderBottom = '2px solid var(--primary)';
+                tabBtn.style.color = 'var(--text-main)';
+
+                [viewMyJobs, viewSaved, viewApps, viewProfilePhoto].forEach(v => {
+                    if (v) v.style.display = 'none';
+                });
+                
+                if (viewDiv.id === 'view-apps' || viewDiv.id === 'view-profile-photo' || viewDiv.innerHTML.includes('No jobs') || viewDiv.innerHTML.includes('No saved') || viewDiv.innerHTML.includes('No active contracts')) {
+                    viewDiv.style.display = 'block';
+                } else {
+                    viewDiv.style.display = 'grid';
+                }
+            }
+
+            tabMyJobs.addEventListener('click', () => setActiveTab(tabMyJobs, viewMyJobs));
+            if (tabSaved) tabSaved.addEventListener('click', () => setActiveTab(tabSaved, viewSaved));
+            if (tabApps) tabApps.addEventListener('click', () => setActiveTab(tabApps, viewApps));
+            if (tabProfilePhoto) tabProfilePhoto.addEventListener('click', () => setActiveTab(tabProfilePhoto, viewProfilePhoto));
+
+            // Dashboard Profile Photo Logic
+            const dashAvatarPreview = document.getElementById('dash-avatar-preview');
+            const dashAvatarPlaceholder = document.getElementById('dash-avatar-placeholder');
+            const dashAvatarInput = document.getElementById('dash-avatar-input');
+            const dashBtnUpload = document.getElementById('dash-btn-upload');
+            const dashBtnCancel = document.getElementById('dash-btn-cancel');
+            const dashBtnRemove = document.getElementById('dash-btn-remove');
+            const dashAvatarMsg = document.getElementById('dash-avatar-msg');
+
+            const refreshDashAvatar = () => {
+                const fresh = window.localHireApp.getCurrentUser() || user;
+                if (fresh && fresh.avatarUrl) {
+                    dashAvatarPreview.src = fresh.avatarUrl;
+                    dashAvatarPreview.style.display = 'block';
+                    dashAvatarPlaceholder.style.display = 'none';
+                    dashBtnRemove.style.display = 'inline-block';
+                } else {
+                    dashAvatarPreview.src = '';
+                    dashAvatarPreview.style.display = 'none';
+                    dashAvatarPlaceholder.textContent = (fresh?.name || '?').charAt(0).toUpperCase();
+                    dashAvatarPlaceholder.style.display = 'flex';
+                    dashBtnRemove.style.display = 'none';
+                }
+            };
+            refreshDashAvatar();
+
+            let pendingDashFile = null;
+
+            if (dashAvatarInput) {
+                dashAvatarInput.addEventListener('change', (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+                    if (!validTypes.includes(file.type.toLowerCase())) {
+                        dashAvatarMsg.textContent = 'Invalid file type. Please select a JPG, PNG, or WebP image.';
+                        dashAvatarMsg.style.color = '#ef4444';
+                        dashAvatarMsg.style.display = 'block';
+                        dashAvatarInput.value = '';
+                        return;
+                    }
+
+                    if (file.size > 5 * 1024 * 1024) {
+                        dashAvatarMsg.textContent = 'Image exceeds 5 MB. Please choose a smaller photo.';
+                        dashAvatarMsg.style.color = '#ef4444';
+                        dashAvatarMsg.style.display = 'block';
+                        dashAvatarInput.value = '';
+                        return;
+                    }
+
+                    pendingDashFile = file;
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        dashAvatarPreview.src = evt.target.result;
+                        dashAvatarPreview.style.display = 'block';
+                        dashAvatarPlaceholder.style.display = 'none';
+                        dashBtnUpload.style.display = 'inline-block';
+                        dashBtnCancel.style.display = 'inline-block';
+                        dashBtnRemove.style.display = 'none';
+                        dashAvatarMsg.textContent = `Ready to upload: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+                        dashAvatarMsg.style.color = '#94a3b8';
+                        dashAvatarMsg.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                });
+
+                dashBtnCancel.addEventListener('click', () => {
+                    pendingDashFile = null;
+                    dashAvatarInput.value = '';
+                    dashBtnUpload.style.display = 'none';
+                    dashBtnCancel.style.display = 'none';
+                    dashAvatarMsg.style.display = 'none';
+                    refreshDashAvatar();
+                });
+
+                dashBtnUpload.addEventListener('click', async () => {
+                    if (!pendingDashFile) return;
+
+                    dashBtnUpload.disabled = true;
+                    dashBtnUpload.textContent = 'Uploading...';
+                    dashAvatarMsg.textContent = 'Uploading to Supabase Storage...';
+                    dashAvatarMsg.style.color = '#38bdf8';
+                    dashAvatarMsg.style.display = 'block';
+
+                    try {
+                        const res = await window.localHireAPI.uploadAvatar(pendingDashFile);
+                        if (res && res.success) {
+                            dashAvatarMsg.textContent = 'Profile picture updated successfully!';
+                            dashAvatarMsg.style.color = '#10b981';
+                            dashBtnUpload.style.display = 'none';
+                            dashBtnCancel.style.display = 'none';
+                            pendingDashFile = null;
+                            dashAvatarInput.value = '';
+                            renderNavbar('navbar-container', 'pages');
+                            refreshDashAvatar();
+                        } else {
+                            throw new Error(res?.message || 'Upload failed.');
+                        }
+                    } catch (err) {
+                        console.error('[Avatar Upload]', err);
+                        dashAvatarMsg.textContent = err.message || 'Failed to upload photo.';
+                        dashAvatarMsg.style.color = '#ef4444';
+                    } finally {
+                        dashBtnUpload.disabled = false;
+                        dashBtnUpload.textContent = 'Upload to Supabase';
+                    }
+                });
+
+                dashBtnRemove.addEventListener('click', async () => {
+                    if (!confirm('Are you sure you want to remove your profile photo?')) return;
+
+                    dashBtnRemove.disabled = true;
+                    dashAvatarMsg.textContent = 'Removing photo...';
+                    dashAvatarMsg.style.color = '#94a3b8';
+                    dashAvatarMsg.style.display = 'block';
+
+                    try {
+                        const res = await window.localHireAPI.deleteAvatar();
+                        if (res && res.success) {
+                            dashAvatarMsg.textContent = 'Profile photo removed.';
+                            dashAvatarMsg.style.color = '#10b981';
+                            renderNavbar('navbar-container', 'pages');
+                            refreshDashAvatar();
+                        } else {
+                            throw new Error(res?.message || 'Failed to remove photo.');
+                        }
+                    } catch (err) {
+                        console.error('[Avatar Delete]', err);
+                        dashAvatarMsg.textContent = err.message || 'Failed to remove photo.';
+                        dashAvatarMsg.style.color = '#ef4444';
+                    } finally {
+                        dashBtnRemove.disabled = false;
+                    }
+                });
+            }
+
+            // Delegate booking action button clicks (Accept, Start, Complete, Cancel)
+            viewMyJobs.addEventListener('click', async (e) => {
+                const actionBtn = e.target.closest('.btn-booking-action');
+                if (actionBtn) {
+                    const bookingId = actionBtn.getAttribute('data-booking-id');
+                    const targetStatus = actionBtn.getAttribute('data-action');
+                    if (!confirm(`Are you sure you want to mark this booking as ${targetStatus}?`)) return;
+
+                    actionBtn.disabled = true;
+                    actionBtn.textContent = 'Updating...';
+
+                    const updateRes = await window.localHireAPI.updateBookingStatus(bookingId, targetStatus);
+                    if (updateRes && updateRes.success) {
+                        const msg = targetStatus === 'COMPLETED'
+                            ? '✅ Service marked as complete! The customer will now be notified to confirm and release payment.'
+                            : `✅ Booking status updated to ${targetStatus}!`;
+                        alert(msg);
+                        window.location.reload();
+                    } else {
+                        alert(`❌ Could not update booking status: ${updateRes ? updateRes.message : 'Database unavailable'}`);
+                        actionBtn.disabled = false;
+                    }
+                }
+
+                // Customer "Approve & Release Payment" button — opens UPI/Cash escrow release modal
+                const releaseBtn = e.target.closest('.btn-release-escrow');
+                if (releaseBtn) {
+                    const bookingId = releaseBtn.getAttribute('data-booking-id');
+                    const workerName = releaseBtn.getAttribute('data-worker-name');
+                    const amount = releaseBtn.getAttribute('data-amount');
+                    if (window.LocalHireEscrow && window.LocalHireEscrow.openReleaseModal) {
+                        window.LocalHireEscrow.openReleaseModal(bookingId, workerName, amount, true, (success, msg) => {
+                            if (success) {
+                                window.location.reload();
+                            } else {
+                                alert(msg || 'Could not release payment. Please try again.');
+                            }
+                        });
+                    } else {
+                        alert('Escrow module not loaded. Please refresh the page.');
+                    }
+                    return;
+                }
+
+                const trackingBtn = e.target.closest('.tracking-action-btn');
+                if (trackingBtn) {
+                    const bookingId = trackingBtn.getAttribute('data-booking-id');
+                    const role = trackingBtn.getAttribute('data-role');
+                    const mode = trackingBtn.getAttribute('data-mode');
+
+                    const container = document.querySelector(`.tracking-container[data-booking-id="${bookingId}"]`);
+                    const custLat = container ? container.getAttribute('data-cust-lat') : null;
+                    const custLng = container ? container.getAttribute('data-cust-lng') : null;
+
+                    const socket = window.localHireAPI && window.localHireAPI.tracking ? window.localHireAPI.tracking.connect(bookingId, {
+                        onState: (payload) => {
+                            if (payload && payload.bookingId === bookingId) {
+                                const activeText = payload.active ? 'Tracking active' : (payload.lastLocation ? 'Worker base location found' : 'Tracking not active');
+                                if (payload.lastLocation && payload.lastLocation.latitude && payload.lastLocation.longitude) {
+                                    const dist = calculateDistanceKm(custLat, custLng, payload.lastLocation.latitude, payload.lastLocation.longitude);
+                                    const distStr = dist !== null ? (dist < 1 ? ` (${Math.round(dist * 1000)}m away)` : ` (${dist.toFixed(1)} km away)`) : '';
+                                    updateTrackingCard(bookingId, (payload.message || activeText) + distStr, payload.active ? 'Live' : 'Located');
+                                    updateTrackingMap(bookingId, payload.lastLocation.latitude, payload.lastLocation.longitude, 'Worker', custLat, custLng);
+                                } else {
+                                    updateTrackingCard(bookingId, payload.message || activeText, payload.active ? 'Live' : 'Waiting');
+                                }
+                            }
+                        },
+                        onLocation: (payload) => {
+                            if (payload && payload.bookingId === bookingId && payload.location) {
+                                const dist = calculateDistanceKm(custLat, custLng, payload.location.latitude, payload.location.longitude);
+                                const distStr = dist !== null ? (dist < 1 ? ` (${Math.round(dist * 1000)}m away)` : ` (${dist.toFixed(1)} km away)`) : '';
+                                const timeStr = new Date(payload.lastUpdated || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                updateTrackingCard(bookingId, `Worker updated at ${timeStr}${distStr}`, 'Live');
+                                updateTrackingMap(bookingId, payload.location.latitude, payload.location.longitude, 'Worker', custLat, custLng);
+                            }
+                        },
+                        onStatusChanged: (payload) => {
+                            if (payload && payload.bookingId === bookingId) {
+                                if (payload.status === 'COMPLETED' || payload.status === 'CANCELLED') {
+                                    updateTrackingCard(bookingId, `Booking is ${payload.status.toLowerCase()}. Location sharing ended.`, 'Closed');
+                                    if (role === 'Worker') {
+                                        window.localHireAPI.tracking.stopBrowserWatch(bookingId);
+                                    }
+                                }
+                                setTimeout(() => window.location.reload(), 1200);
+                            }
+                        },
+                        onStopped: (payload) => {
+                            if (payload && payload.bookingId === bookingId) {
+                                updateTrackingCard(bookingId, payload.message || 'Tracking stopped.', 'Paused');
+                            }
+                        },
+                        onError: (payload) => {
+                            if (payload && payload.bookingId === bookingId) {
+                                updateTrackingCard(bookingId, payload.message || 'Tracking unavailable.', 'Error');
+                            }
+                        }
+                    }) : null;
+
+                    if (!socket) {
+                        alert('The real-time tracking socket is not available in this browser session.');
+                        return;
+                    }
+
+                    if (role === 'Worker') {
+                        if (mode === 'start') {
+                            socket.emit('booking:join', { bookingId });
+                            trackingBtn.setAttribute('data-mode', 'stop');
+                            trackingBtn.textContent = 'Stop Live Tracking';
+                            updateTrackingCard(bookingId, 'Live tracking started. Your location is now being shared.', 'Live');
+                            window.localHireAPI.tracking.watchBrowserLocation(bookingId, {
+                                onLocation: (locPayload) => {
+                                    if (locPayload && locPayload.bookingId === bookingId) {
+                                        window.localHireAPI.tracking.updateLocation(bookingId, locPayload.latitude, locPayload.longitude, locPayload.accuracy || null);
+                                        updateTrackingMap(bookingId, locPayload.latitude, locPayload.longitude, 'You (Worker)', custLat, custLng);
+                                    }
+                                },
+                                onError: (errorPayload) => {
+                                    if (errorPayload && errorPayload.bookingId === bookingId) {
+                                        updateTrackingCard(bookingId, errorPayload.message || 'Location access is unavailable.', 'Error');
+                                    }
+                                }
+                            });
+                        } else {
+                            socket.emit('booking:leave', { bookingId });
+                            trackingBtn.setAttribute('data-mode', 'start');
+                            trackingBtn.textContent = 'Start Live Tracking';
+                            updateTrackingCard(bookingId, 'Live tracking stopped.', 'Paused');
+                            window.localHireAPI.tracking.stopBrowserWatch(bookingId);
+                        }
+                    } else {
+                        socket.emit('booking:join', { bookingId });
+                        updateTrackingCard(bookingId, 'Subscribed to live worker location. Waiting for updates…', 'Live');
+                        trackingBtn.textContent = 'Refresh Live Location';
+                    }
+                }
+            });
+
+            // Retrieve persistent bookings from backend (PostgreSQL / Prisma)
+            const bookingRes = await window.localHireAPI.getMyBookings();
+            const myBookings = (bookingRes && bookingRes.success) ? (bookingRes.bookings || []) : [];
+
+            // Load jobs from the live backend instead of stale localStorage data so customer
+            // and worker records match the PostgreSQL / Prisma database.
+            const allJobs = await window.localHireAPI.getJobs();
+            let myJobs = [];
+            if (user.role === 'Worker') {
+                // Workers see jobs assigned to their user ID or user name
+                myJobs = allJobs.filter(j => j.assignedWorker === user.id || j.assignedWorker === user.name);
+            } else {
+                // Customers see jobs posted by them
+                myJobs = allJobs.filter(j => j.customerId === user.id || j.customerName === user.name);
+            }
+
+            const totalCount = myBookings.length + myJobs.length;
+
+            if (totalCount === 0) {
+                viewMyJobs.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 4rem 2rem;" class="glass-card">
+                        <svg class="icon text-muted" style="width: 48px; height: 48px; margin: 0 auto 1rem auto;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <h3>${user.role === 'Worker' ? 'No active contracts yet' : 'No jobs or bookings found'}</h3>
+                        <p class="text-muted" style="margin-bottom: 1.5rem;">${user.role === 'Worker' ? 'When a customer hires you, your assigned bookings and contracts will appear here.' : 'You do not have any active service bookings or requests.'}</p>
+                        ${user.role === 'Customer' ? `<a href="search.html" class="btn btn-primary" style="margin-right: 0.5rem;">Find Workers</a><a href="post-job.html" class="btn btn-outline">Post a Job</a>` : `<a href="jobs.html" class="btn btn-primary">Browse Available Jobs</a>`}
+                    </div>
+                `;
+                viewMyJobs.style.display = 'block';
+            } else {
+                viewMyJobs.innerHTML = '';
+
+                // 1. Render Bookings (PostgreSQL / Prisma)
+                myBookings.forEach(booking => {
+                    viewMyJobs.innerHTML += createBookingCard(booking, user.role);
+                });
+
+                // Auto-subscribe tracking for customer so worker GPS map loads immediately while waiting
+                if (user.role === 'Customer') {
+                    setTimeout(() => {
+                        myBookings.forEach(booking => {
+                            if (['CONFIRMED', 'DISPATCHED', 'IN_PROGRESS'].includes(booking.status)) {
+                                const btn = document.querySelector(`.tracking-action-btn[data-booking-id="${booking.id}"]`);
+                                if (btn && btn.getAttribute('data-mode') === 'subscribe') {
+                                    btn.click();
+                                }
+                            }
+                        });
+                    }, 400);
+                }
+
+                // 2. Render Jobs (Job posts or assigned jobs)
+                const jobsWithQuoteCounts = await Promise.all(myJobs.map(async (job) => {
+                    let appCount = 0;
+                    if (user.role === 'Customer') {
+                        try {
+                            const apps = await window.localHireAPI.getApplicationsForJob(job.id);
+                            appCount = Array.isArray(apps) ? apps.length : 0;
+                        } catch (error) {
+                            appCount = 0;
+                        }
+                    }
+                    return { ...job, appCount };
+                }));
+
+                jobsWithQuoteCounts.forEach(job => {
+                    let cardHtml = createJobCard(job);
+                    
+                    if (user.role === 'Customer') {
+                        const appCount = job.appCount || 0;
+                        
+                        const wrapper = document.createElement('div');
+                        wrapper.innerHTML = cardHtml;
+                        const cardDiv = wrapper.firstElementChild;
+                        
+                        let actionHtml = '';
+                        if (job.status === 'In Progress') {
+                            actionHtml = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <span class="escrow-badge escrow-held" style="align-self: flex-start;">🔒 Payment Locked in Escrow</span>
+                                    <button class="btn btn-primary release-escrow-btn" style="width: 100%; font-size: 0.85rem;" onclick="window.LocalHireEscrow.releasePayment('${encodeURIComponent(job.id)}')">
+                                        Release Payment & Complete Job
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            actionHtml = `
+                                <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                    <button class="btn btn-outline view-quotes-btn" style="width: 100%; border-color: var(--primary); color: var(--primary);" data-job-id="${encodeURIComponent(job.id)}" data-job-title="${escapeHTML(job.title)}">
+                                        View Quotes (${appCount})
+                                    </button>
+                                </div>
+                            `;
+                        }
+                        cardDiv.innerHTML += actionHtml;
+                        viewMyJobs.appendChild(cardDiv);
+                    } else {
+                        viewMyJobs.innerHTML += cardHtml;
+                    }
+                });
+            }
+
+            // Load Saved Workers (if Customer)
+            if (user.role === 'Customer') {
+                const users = window.localHireApp.getUsers();
+                const freshUser = users.find(u => u.id === user.id) || { favorites: [] };
+                const savedWorkers = Array.isArray(freshUser.favorites) ? freshUser.favorites : [];
+                
+                if (savedWorkers.length === 0) {
+                    viewSaved.innerHTML = `
+                        <div style="grid-column: 1 / -1; text-align: center; padding: 4rem 2rem;" class="glass-card">
+                            <svg class="icon text-muted" style="width: 48px; height: 48px; margin: 0 auto 1rem auto;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                            <h3>No saved workers</h3>
+                            <p class="text-muted" style="margin-bottom: 1.5rem;">Browse and save your favorite professionals for quick access later.</p>
+                            <a href="search.html" class="btn btn-outline">Find Workers</a>
+                        </div>
+                    `;
+                } else {
+                    savedWorkers.forEach(workerId => {
+                        const worker = window.localHireApp.getWorkerById(workerId);
+                        if (worker) {
+                            viewSaved.innerHTML += createWorkerCard(worker);
+                        }
+                    });
+                }
+            }
+
+            // Customer Modal Logic
+            if (user.role === 'Customer') {
+                const modal = document.getElementById('customer-apps-modal');
+                const closeBtn = document.getElementById('close-customer-apps');
+                const modalTitle = document.getElementById('modal-job-title');
+                const modalList = document.getElementById('modal-apps-list');
+
+                // Bind View Quotes buttons using event delegation since they are added dynamically
+                viewMyJobs.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('.view-quotes-btn');
+                    if (btn) {
+                        const jobId = btn.getAttribute('data-job-id');
+                        const jobTitle = btn.getAttribute('data-job-title');
+                        
+                        modalTitle.textContent = `For: ${jobTitle}`;
+                        modalList.innerHTML = '';
+                        
+                        const apps = await window.localHireAPI.getApplicationsForJob(jobId);
+                        if (!apps || apps.length === 0) {
+                            modalList.innerHTML = `<p class="text-muted" style="text-align: center; padding: 2rem;">No quotes received yet.</p>`;
+                        } else {
+                            apps.forEach(app => {
+                                const safeWorkerName = escapeHTML(app.workerName || 'Worker');
+                                const safeWorkerAvatar = app.workerAvatar ? escapeHTML(app.workerAvatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(app.workerName || 'worker')}`;
+                                const safeMessage = escapeHTML(app.message || '');
+                                const safeStatus = escapeHTML(app.status || 'Pending');
+                                const safeQuote = Number(app.quote || 0);
+
+                                modalList.innerHTML += `
+                                    <div class="glass-card" style="padding: 1.5rem; background: var(--surface-light); border: 1px solid var(--border-light);">
+                                        <div class="flex justify-between items-start" style="margin-bottom: 1rem;">
+                                            <div class="flex items-center gap-3">
+                                                <img src="${safeWorkerAvatar}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--primary);">
+                                                <div>
+                                                    <h4 style="margin: 0; font-size: 1.1rem; color: var(--text-main);">${safeWorkerName}</h4>
+                                                    <a href="profile.html?id=${encodeURIComponent(app.workerId)}" style="font-size: 0.8rem; color: var(--primary); text-decoration: none;">View Profile</a>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col items-end">
+                                                <span style="font-size: 1.2rem; font-weight: bold; color: var(--secondary);">₹${safeQuote}</span>
+                                                <span class="badge" style="margin-top: 0.25rem;">${safeStatus}</span>
+                                            </div>
+                                        </div>
+                                        <p style="font-size: 0.95rem; margin: 0; color: var(--text-main); padding: 1rem; background: rgba(0,0,0,0.05); border-radius: 8px;">"${safeMessage}"</p>
+                                        <div style="margin-top: 1rem; text-align: right;">
+                                            <button class="btn btn-primary accept-quote-btn" data-app-id="${encodeURIComponent(app.id)}" data-job-id="${encodeURIComponent(jobId)}" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;">
+                                                Accept Quote & Hire
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                        }
+                        
+                        modal.style.display = 'flex';
+                    }
+                });
+
+                modalList.addEventListener('click', async (e) => {
+                    const acceptBtn = e.target.closest('.accept-quote-btn');
+                    if (acceptBtn) {
+                        const jobId = acceptBtn.getAttribute('data-job-id');
+                        const appId = acceptBtn.getAttribute('data-app-id');
+                        const apps = await window.localHireAPI.getApplicationsForJob(jobId);
+                        const app = Array.isArray(apps) ? apps.find(a => a.id === appId) : null;
+                        const workerId = app ? app.workerId : 'w1';
+                        const amount = Number(app ? app.quote : 500) || 500;
+
+                        modal.style.display = 'none';
+
+                        const acceptResult = await window.localHireAPI.acceptQuote(appId);
+                        if (!acceptResult || !acceptResult.success) {
+                            alert(acceptResult?.message || 'Could not accept this quote.');
+                            return;
+                        }
+
+                        if (window.LocalHireEscrow && window.LocalHireEscrow.openFundModal) {
+                            window.LocalHireEscrow.openFundModal(jobId, workerId, amount, () => {
+                                alert('✅ Quote accepted & payment locked in Escrow!');
+                                window.location.reload();
+                            });
+                        } else {
+                            alert('✅ Quote accepted & payment locked in Escrow!');
+                            window.location.reload();
+                        }
+                    }
+                });
+
+                closeBtn.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+            }
+
+            // Load Applications (if Worker)
+            if (user.role === 'Worker') {
+                (async () => {
+                    const viewAppsContainer = document.getElementById('apps-container');
+                    const noApps = document.getElementById('no-apps');
+                    
+                    const myApps = await window.localHireAPI.getWorkerApplications();
+                    if (!myApps || myApps.length === 0) {
+                        viewAppsContainer.style.display = 'none';
+                        noApps.style.display = 'block';
+                    } else {
+                        viewAppsContainer.style.display = 'grid';
+                        noApps.style.display = 'none';
+                        viewAppsContainer.innerHTML = '';
+                        
+                        const allJobs = await window.localHireAPI.getJobs();
+                        
+                        myApps.forEach(app => {
+                            const job = allJobs.find(j => j.id === app.jobId);
+                            if (job) {
+                                viewAppsContainer.innerHTML += `
+                                    <div class="glass-card flex-col gap-3">
+                                        <div class="flex justify-between items-start">
+                                            <h4 style="margin: 0; color: var(--primary);">${job.title}</h4>
+                                            <span class="badge badge-primary">${app.status || 'Pending'}</span>
+                                        </div>
+                                        <p class="text-muted" style="margin: 0; font-size: 0.9rem;">To: ${job.customerName}</p>
+                                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-light);">
+                                            <p style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: var(--text-muted);">Your Quote</p>
+                                            <p style="margin: 0; font-weight: bold; color: var(--secondary); font-size: 1.1rem;">${app.quote}</p>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        });
+                    }
+                })();
+            }
+        });
+    </script>
+</body>
+</html>

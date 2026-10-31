@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Feed | LocalHire</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div class="container" style="padding: 2rem 1.5rem;">
+        <div class="flex items-center justify-between" style="margin-bottom: 2rem;">
+            <h2>Recent Job Requests</h2>
+        </div>
+
+        <div class="flex gap-8" style="flex-wrap: wrap;">
+            
+            <!-- Sidebar Filters -->
+            <aside style="width: 100%; max-width: 280px; flex-shrink: 0;">
+                <div class="glass-card" style="position: sticky; top: 100px;">
+                    <h3 style="margin-bottom: 1.5rem; font-size: 1.2rem;">Filters</h3>
+                    
+                    <div class="input-group">
+                        <label class="input-label">Keywords</label>
+                        <input type="text" id="filter-q" class="input-control" placeholder="E.g. Plumber, Tutoring">
+                    </div>
+                    
+                    <div class="input-group" style="margin-top: 1.5rem;">
+                        <label class="input-label">Category</label>
+                        <select id="filter-category" class="input-control" style="appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill=%22%2394a3b8%22 viewBox=%220 0 24 24%22 width=%2224%22 height=%2224%22><path d=%22M7 10l5 5 5-5z%22/></svg>'); background-repeat: no-repeat; background-position: right 1rem center;">
+                            <option value="">All Categories</option>
+                            <option value="Tutor">Tutor</option>
+                            <option value="Electrician">Electrician</option>
+                            <option value="Plumber">Plumber</option>
+                            <option value="Cleaner">Cleaner</option>
+                            <option value="Driver">Driver</option>
+                            <option value="Freelancer">Freelancer</option>
+                        </select>
+                    </div>
+
+                    <button id="apply-filters" class="btn btn-primary" style="width: 100%; margin-top: 2rem;">Apply Filters</button>
+                </div>
+            </aside>
+
+            <!-- Main Results -->
+            <main style="flex-grow: 1;">
+                <div id="job-feed" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Populated via JS -->
+                </div>
+                
+                <div id="no-results" style="display: none; text-align: center; padding: 4rem 2rem;" class="glass-card">
+                    <svg class="icon text-muted" style="width: 48px; height: 48px; margin: 0 auto 1rem auto;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <h3>No jobs found</h3>
+                    <p class="text-muted">Try adjusting your filters or search terms.</p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Apply Modal -->
+    <div id="apply-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="glass-card animate-fade-in" style="width: 100%; max-width: 500px; padding: 2.5rem;">
+            <div class="flex justify-between items-start" style="margin-bottom: 1.5rem;">
+                <h3 style="margin: 0; font-size: 1.5rem;">Submit Quote</h3>
+                <button type="button" class="btn" id="close-apply" style="padding: 0; background: transparent; color: var(--text-muted);">&times;</button>
+            </div>
+            
+            <p id="apply-job-title" style="font-weight: 500; margin-bottom: 0.5rem;"></p>
+            <p id="apply-job-budget" class="text-muted" style="font-size: 0.9rem; margin-bottom: 2rem;"></p>
+
+            <form id="apply-form">
+                <input type="hidden" id="apply-job-id">
+                
+                <div class="input-group" style="margin-bottom: 1.5rem;">
+                    <label class="input-label">Your Quote / Rate</label>
+                    <input type="text" id="apply-quote" class="input-control" placeholder="E.g. $120 total or $45/hr" required>
+                </div>
+                
+                <div class="input-group" style="margin-bottom: 2rem;">
+                    <label class="input-label">Message</label>
+                    <textarea id="apply-message" class="input-control" rows="4" placeholder="Introduce yourself and explain how you can help..." required style="resize: vertical;"></textarea>
+                </div>
+                
+                <div class="flex justify-end gap-3">
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.8rem;">Send Quote</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/data.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNavbar('navbar-container', 'pages');
+
+            const user = window.localHireApp.getCurrentUser();
+            if (!user) {
+                window.location.href = 'auth.html';
+                return;
+            }
+
+            if (user.role === 'Customer') {
+                alert("Customers cannot view the worker job feed.");
+                window.location.href = '../index.html';
+                return;
+            }
+
+            const feedContainer = document.getElementById('job-feed');
+            const noResults = document.getElementById('no-results');
+            const qInput = document.getElementById('filter-q');
+            const catSelect = document.getElementById('filter-category');
+            const applyBtn = document.getElementById('apply-filters');
+            
+            // Modal Elements
+            const applyModal = document.getElementById('apply-modal');
+            const closeApplyBtn = document.getElementById('close-apply');
+            const applyForm = document.getElementById('apply-form');
+            const applyJobIdInput = document.getElementById('apply-job-id');
+            const applyJobTitleRender = document.getElementById('apply-job-title');
+            const applyJobBudgetRender = document.getElementById('apply-job-budget');
+
+            // Default category to worker's own category
+            if (user.category) {
+                catSelect.value = user.category;
+            }
+
+            async function renderFeed() {
+                const allJobs = await window.localHireAPI.getJobs();
+                const myApps = await window.localHireAPI.getWorkerApplications();
+                const myApplicationJobIds = (myApps || []).map(a => a.jobId).filter(Boolean);
+                
+                const filterQ = qInput.value.toLowerCase();
+                const filterCat = catSelect.value;
+
+                // Filter out jobs worker has already applied to
+                const availableJobs = allJobs.filter(j => !myApplicationJobIds.includes(j.id));
+                
+                const filtered = availableJobs.filter(j => {
+                    const matchQ = j.title.toLowerCase().includes(filterQ) || j.description.toLowerCase().includes(filterQ);
+                    const matchCat = filterCat === '' || j.category === filterCat;
+                    return matchQ && matchCat;
+                });
+
+                feedContainer.innerHTML = '';
+                
+                if (filtered.length === 0) {
+                    feedContainer.style.display = 'none';
+                    noResults.style.display = 'block';
+                } else {
+                    feedContainer.style.display = 'grid';
+                    noResults.style.display = 'none';
+                    
+                    filtered.forEach(job => {
+                        // Append an apply button to the basic card
+                        const cardHtml = createJobCard(job);
+                        const wrapper = document.createElement('div');
+                        wrapper.innerHTML = cardHtml;
+                        const cardDiv = wrapper.firstElementChild;
+                        
+                        const applyActionHtml = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-primary open-apply-btn" style="width: 100%;" data-job-id="${encodeURIComponent(job.id)}" data-job-title="${escapeHTML(job.title)}" data-job-budget="${escapeHTML(job.budget)}">Apply Now</button>
+                            </div>
+                        `;
+                        cardDiv.innerHTML += applyActionHtml;
+                        feedContainer.appendChild(cardDiv);
+                    });
+                }
+            }
+
+            applyBtn.addEventListener('click', () => renderFeed());
+
+            // Event Delegation for dynamically generated apply buttons
+            feedContainer.addEventListener('click', (e) => {
+                const applyBtn = e.target.closest('.open-apply-btn');
+                if (applyBtn) {
+                    const jobId = applyBtn.getAttribute('data-job-id');
+                    const jobTitle = applyBtn.getAttribute('data-job-title');
+                    const jobBudget = applyBtn.getAttribute('data-job-budget');
+                    
+                    applyJobIdInput.value = jobId;
+                    applyJobTitleRender.textContent = jobTitle;
+                    applyJobBudgetRender.textContent = `Customer Budget: ${jobBudget}`;
+                    
+                    applyModal.style.display = 'flex';
+                }
+            });
+
+            closeApplyBtn.addEventListener('click', () => {
+                applyModal.style.display = 'none';
+                applyForm.reset();
+            });
+
+            applyForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const jobId = applyJobIdInput.value;
+                const quote = document.getElementById('apply-quote').value;
+                const message = document.getElementById('apply-message').value;
+                
+                const result = await window.localHireAPI.createApplication(jobId, quote, message);
+                if (!result.success) {
+                    alert(result.message || 'Could not submit application.');
+                    return;
+                }
+                
+                // Close modal and refresh feed
+                applyModal.style.display = 'none';
+                applyForm.reset();
+                renderFeed();
+                
+                alert("Your quote has been sent to the customer!");
+            });
+
+            renderFeed();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,720 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// ENUMS
+// -------------------------------------------------------------
+
+enum UserRole {
+  CUSTOMER
+  WORKER
+  ADMIN
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum PriceType {
+  FIXED
+  HOURLY
+  INSPECTION_PLUS_QUOTE
+}
+
+enum UrgencyLevel {
+  EMERGENCY_TODAY
+  THIS_WEEK
+  FLEXIBLE
+}
+
+enum JobStatus {
+  OPEN
+  QUOTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum BookingStatus {
+  REQUESTED
+  CONFIRMED
+  DISPATCHED
+  IN_PROGRESS
+  AWAITING_CUSTOMER_CONFIRMATION
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  HELD_IN_ESCROW
+  RELEASED_TO_WORKER
+  REFUNDED_TO_CUSTOMER
+  DISPUTED
+  FAILED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NET_BANKING
+  CASH_ON_DELIVERY
+  WALLET
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_REFUND
+  RESOLVED_PAYOUT
+  DISMISSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_CONFIRMED
+  QUOTE_RECEIVED
+  QUOTE_ACCEPTED
+  PAYMENT_HELD
+  PAYMENT_RELEASED
+  JOB_COMPLETED
+  NEW_MESSAGE
+  REVIEW_SUBMITTED
+  SYSTEM_ALERT
+}
+
+// -------------------------------------------------------------
+// USER & AUTHENTICATION
+// -------------------------------------------------------------
+
+model User {
+  id              String             @id @default(uuid())
+  email           String             @unique
+  passwordHash    String
+  name            String
+  phone           String?
+  role            UserRole           @default(CUSTOMER)
+  avatarUrl       String?
+  isActive        Boolean            @default(true)
+  isEmailVerified Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // Profiles and Addresses
+  workerProfile   WorkerProfile?
+  addresses       CustomerAddress[]
+  customerLocation CustomerLocation?
+
+  // Customer Job Requests & Applications
+  jobsPosted      JobPost[]          @relation("CustomerJobPosts")
+  applications    JobApplication[]   @relation("WorkerJobApplications")
+
+  // Bookings (Customer side and Professional side)
+  customerBookings Booking[]         @relation("CustomerBookings")
+  workerBookings   Booking[]         @relation("WorkerBookings")
+
+  // Booking Status Audit Trail (Actor)
+  bookingStatusChanges BookingStatusHistory[] @relation("StatusChangeActor")
+
+  // Invoices & Payments
+  customerPayments EscrowPayment[]   @relation("CustomerPayments")
+  workerPayouts    EscrowPayment[]   @relation("WorkerPayouts")
+
+  // Reviews
+  reviewsGiven    Review[]           @relation("CustomerReviewsGiven")
+  reviewsReceived Review[]           @relation("WorkerReviewsReceived")
+
+  // Chat & Messaging
+  sentMessages     ChatMessage[]     @relation("SentMessages")
+  receivedMessages ChatMessage[]     @relation("ReceivedMessages")
+  conversationsAsUser1 Conversation[] @relation("ConversationUser1")
+  conversationsAsUser2 Conversation[] @relation("ConversationUser2")
+
+  // Notifications, Tickets, Audit Logs
+  notifications   Notification[]
+  ticketsRaised   SupportTicket[]    @relation("TicketReporter")
+  ticketsAssigned SupportTicket[]    @relation("TicketAssignee")
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+// -------------------------------------------------------------
+// CUSTOMER ADDRESSES
+// -------------------------------------------------------------
+
+model CustomerAddress {
+  id          String    @id @default(uuid())
+  customerId  String
+  customer    User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  label       String    @default("Home") // Home, Office, Apartment
+  flatNumber  String?
+  street      String
+  landmark    String?
+  city        String
+  state       String?
+  postalCode  String
+  latitude    Float?
+  longitude   Float?
+  isDefault   Boolean   @default(false)
+
+  jobPosts    JobPost[]
+  bookings    Booking[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([customerId])
+  @@index([postalCode])
+  @@index([latitude, longitude])
+}
+
+model CustomerLocation {
+  userId               String   @id
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  latitude             Float
+  longitude            Float
+  addressLabel         String?  @db.Text
+  lastLocationUpdate   DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+// -------------------------------------------------------------
+// SERVICE TAXONOMY (Electrician, Plumber, Cleaner, Carpenter, etc.)
+// -------------------------------------------------------------
+
+model ServiceCategory {
+  id             String          @id @default(uuid())
+  name           String          @unique // E.g., Electrician, Plumber, Cleaner, Carpenter, AC Technician
+  slug           String          @unique
+  description    String?         @db.Text
+  iconUrl        String?
+  displayOrder   Int             @default(0)
+  isActive       Boolean         @default(true)
+
+  services       ServiceItem[]
+  workerProfiles WorkerProfile[]
+  jobPosts       JobPost[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model ServiceItem {
+  id             String          @id @default(uuid())
+  categoryId     String
+  category       ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  title          String          // E.g., "Ceiling Fan Installation", "Deep Kitchen Cleaning"
+  slug           String          @unique
+  description    String?         @db.Text
+  basePrice      Decimal         @db.Decimal(10, 2)
+  priceType      PriceType       @default(FIXED)
+  durationMinutes Int            @default(60)
+  isActive       Boolean         @default(true)
+
+  offeredBy      ProfessionalOfferedService[]
+  bookings       Booking[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+// -------------------------------------------------------------
+// PROFESSIONAL (WORKER) PROFILES
+// -------------------------------------------------------------
+
+model WorkerProfile {
+  id                  String             @id @default(uuid())
+  userId              String             @unique
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Primary trade category
+  primaryCategoryId   String
+  primaryCategory     ServiceCategory    @relation(fields: [primaryCategoryId], references: [id])
+
+  businessName        String?
+  experienceYears     Int                @default(0)
+  hourlyRate          Decimal            @default(0) @db.Decimal(10, 2)
+  inspectionFee       Decimal            @default(0) @db.Decimal(10, 2)
+  bio                 String?            @db.Text
+
+  // Verifications
+  verificationStatus  VerificationStatus @default(UNVERIFIED)
+  isBackgroundChecked Boolean            @default(false)
+  isInsured           Boolean            @default(false)
+  licenseNumber       String?
+
+  // Quality metrics
+  rating              Decimal            @default(5.00) @db.Decimal(3, 2)
+  reviewsCount        Int                @default(0)
+  completedJobsCount  Int                @default(0)
+
+  // Geolocation & Coverage
+  serviceRadiusKm     Int                @default(20)
+  serviceAddress      String?
+  latitude            Float?
+  longitude           Float?
+
+  // Profile Relationships
+  locationSharing     WorkerLocation?
+  skills              ProfessionalSkill[]
+  offeredServices     ProfessionalOfferedService[]
+  availabilities      ProfessionalAvailability[]
+  blockedPeriods      ProfessionalBlockedPeriod[]
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([primaryCategoryId])
+  @@index([verificationStatus])
+  @@index([rating])
+  @@index([latitude, longitude])
+}
+
+model WorkerLocation {
+  workerProfileId       String        @id
+  workerProfile         WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  latitude              Float?
+  longitude             Float?
+  lastLocationUpdate    DateTime?
+  isAvailable           Boolean       @default(false)
+  sharingEnabled        Boolean       @default(false)
+  location              Unsupported("geography(Point,4326)")?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([isAvailable, sharingEnabled, lastLocationUpdate])
+}
+
+model ProfessionalSkill {
+  id              String        @id @default(uuid())
+  workerProfileId String
+  workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  skillName       String
+
+  createdAt       DateTime      @default(now())
+
+  @@unique([workerProfileId, skillName])
+  @@index([skillName])
+}
+
+model ProfessionalOfferedService {
+  id              String        @id @default(uuid())
+  workerProfileId String
+  workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  serviceItemId   String
+  serviceItem     ServiceItem   @relation(fields: [serviceItemId], references: [id], onDelete: Cascade)
+
+  customPrice     Decimal?      @db.Decimal(10, 2) // Optional override of standard basePrice
+  isAvailable     Boolean       @default(true)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([workerProfileId, serviceItemId])
+  @@index([serviceItemId])
+}
+
+// -------------------------------------------------------------
+// PROFESSIONAL SCHEDULE & AVAILABILITY
+// -------------------------------------------------------------
+
+model ProfessionalAvailability {
+  id              String        @id @default(uuid())
+  workerProfileId String
+  workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+
+  dayOfWeek       Int           // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  startTime       String        // E.g., "09:00"
+  endTime         String        // E.g., "18:00"
+  isActive        Boolean       @default(true)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([workerProfileId, dayOfWeek])
+  @@index([workerProfileId])
+}
+
+model ProfessionalBlockedPeriod {
+  id              String        @id @default(uuid())
+  workerProfileId String
+  workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+
+  startDateTime   DateTime
+  endDateTime     DateTime
+  reason          String?
+
+  createdAt       DateTime      @default(now())
+
+  @@index([workerProfileId])
+  @@index([startDateTime, endDateTime])
+}
+
+// -------------------------------------------------------------
+// JOB POSTS & CUSTOMER SERVICE REQUESTS
+// -------------------------------------------------------------
+
+model JobPost {
+  id               String           @id @default(uuid())
+  customerId       String
+  customer         User             @relation("CustomerJobPosts", fields: [customerId], references: [id], onDelete: Cascade)
+
+  categoryId       String
+  category         ServiceCategory  @relation(fields: [categoryId], references: [id])
+
+  addressId        String?
+  address          CustomerAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  title            String
+  description      String           @db.Text
+  urgency          UrgencyLevel     @default(FLEXIBLE)
+  scheduledDate    DateTime?
+  scheduledSlot    String?          // E.g., "Morning (09:00 - 12:00)"
+
+  budgetMin        Decimal?         @db.Decimal(10, 2)
+  budgetMax        Decimal?         @db.Decimal(10, 2)
+  status           JobStatus        @default(OPEN)
+
+  applications     JobApplication[]
+  booking          Booking?
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model JobApplication {
+  id            String            @id @default(uuid())
+  jobId         String
+  job           JobPost           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  workerId      String
+  worker        User              @relation("WorkerJobApplications", fields: [workerId], references: [id], onDelete: Cascade)
+
+  quoteAmount   Decimal           @db.Decimal(10, 2)
+  estimatedHours Decimal?         @db.Decimal(4, 1)
+  coverMessage  String            @db.Text
+  status        ApplicationStatus @default(PENDING)
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([jobId, workerId])
+  @@index([jobId])
+  @@index([workerId])
+  @@index([status])
+}
+
+// -------------------------------------------------------------
+// BOOKINGS & WORK EXECUTION
+// -------------------------------------------------------------
+
+model Booking {
+  id                 String               @id @default(uuid())
+  bookingNumber      String               @unique // E.g., "BK-2026-0001"
+
+  customerId         String
+  customer           User                 @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+
+  workerId           String
+  worker             User                 @relation("WorkerBookings", fields: [workerId], references: [id], onDelete: Restrict)
+
+  jobPostId          String?              @unique
+  jobPost            JobPost?             @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+
+  serviceItemId      String?
+  serviceItem        ServiceItem?         @relation(fields: [serviceItemId], references: [id], onDelete: SetNull)
+
+  addressId          String?
+  address            CustomerAddress?     @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  status             BookingStatus        @default(REQUESTED)
+  scheduledAt        DateTime
+  timeSlot           String?              // E.g., "10:00 AM - 01:00 PM"
+
+  agreedPrice        Decimal              @db.Decimal(10, 2)
+  actualDurationMin  Int?
+
+  // Verification PINs for on-site security
+  startOtp           String?              // Generated for customer, verified by worker upon arrival
+  completionOtp      String?              // Verified upon customer sign-off
+
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?              @db.Text
+
+  // Relational records
+  payment            EscrowPayment?
+  review             Review?
+  statusHistory      BookingStatusHistory[]
+  disputes           SupportTicket[]
+
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([customerId])
+  @@index([workerId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model BookingStatusHistory {
+  id             String        @id @default(uuid())
+  bookingId      String
+  booking        Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  fromStatus     BookingStatus?
+  toStatus       BookingStatus
+  changedById    String?
+  changedBy      User?         @relation("StatusChangeActor", fields: [changedById], references: [id], onDelete: SetNull)
+  reason         String?
+
+  createdAt      DateTime      @default(now())
+
+  @@index([bookingId])
+  @@index([createdAt])
+}
+
+// -------------------------------------------------------------
+// INVOICES, PAYMENTS & ESCROW LEDGER
+// -------------------------------------------------------------
+
+model EscrowPayment {
+  id                 String        @id @default(uuid())
+  invoiceNumber      String        @unique // E.g., "INV-2026-0001"
+
+  bookingId          String        @unique
+  booking            Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  customerId         String
+  customer           User          @relation("CustomerPayments", fields: [customerId], references: [id], onDelete: Restrict)
+
+  workerId           String
+  worker             User          @relation("WorkerPayouts", fields: [workerId], references: [id], onDelete: Restrict)
+
+  // Financial Breakdown
+  subtotalAmount     Decimal       @db.Decimal(10, 2)
+  taxAmount          Decimal       @default(0.00) @db.Decimal(10, 2)
+  platformFee        Decimal       @default(0.00) @db.Decimal(10, 2)
+  workerPayoutAmount Decimal       @db.Decimal(10, 2)
+  totalAmount        Decimal       @db.Decimal(10, 2)
+  currency           String        @default("INR")
+
+  status             PaymentStatus @default(PENDING)
+  paymentMethod      PaymentMethod @default(UPI)
+
+  // External Payment Gateway References (e.g. Razorpay / Stripe)
+  gatewayProvider    String?       // "RAZORPAY", "STRIPE", "SIMULATED_GATEWAY"
+  gatewayOrderId     String?       @unique
+  gatewayPaymentId   String?       @unique
+  gatewaySignature   String?
+
+  heldAt             DateTime?
+  releasedAt         DateTime?
+  refundedAt         DateTime?
+
+  refundReason       String?       @db.Text
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([workerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// -------------------------------------------------------------
+// REVIEWS & REPUTATION (Verified Booking Required)
+// -------------------------------------------------------------
+
+model Review {
+  id             String   @id @default(uuid())
+  bookingId      String   @unique
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  customerId     String
+  customer       User     @relation("CustomerReviewsGiven", fields: [customerId], references: [id], onDelete: Restrict)
+
+  workerId       String
+  worker         User     @relation("WorkerReviewsReceived", fields: [workerId], references: [id], onDelete: Restrict)
+
+  rating         Int      // Range 1 to 5
+  cleanliness    Int?     // Sub-rating 1 to 5
+  punctuality    Int?     // Sub-rating 1 to 5
+  communication  Int?     // Sub-rating 1 to 5
+  comment        String   @db.Text
+  isVerified     Boolean  @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([customerId])
+  @@index([rating])
+}
+
+// -------------------------------------------------------------
+// REAL-TIME CONVERSATIONS & CHAT
+// -------------------------------------------------------------
+
+model Conversation {
+  id             String        @id @default(uuid())
+  user1Id        String
+  user1          User          @relation("ConversationUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2Id        String
+  user2          User          @relation("ConversationUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  lastMessageAt  DateTime      @default(now())
+  messages       ChatMessage[]
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([lastMessageAt])
+}
+
+model ChatMessage {
+  id             String        @id @default(uuid())
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId       String
+  sender         User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId     String
+  receiver       User          @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  content        String        @db.Text
+  isRead         Boolean       @default(false)
+  readAt         DateTime?
+
+  createdAt      DateTime      @default(now())
+
+  @@index([conversationId])
+  @@index([senderId, receiverId])
+  @@index([createdAt])
+}
+
+// -------------------------------------------------------------
+// NOTIFICATIONS
+// -------------------------------------------------------------
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  message     String           @db.Text
+  type        NotificationType
+  linkUrl     String?
+  isRead      Boolean          @default(false)
+
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// -------------------------------------------------------------
+// SUPPORT TICKETS & DISPUTES
+// -------------------------------------------------------------
+
+model SupportTicket {
+  id             String         @id @default(uuid())
+  ticketNumber   String         @unique // E.g., "TCK-2026-0001"
+
+  reporterId     String
+  reporter       User           @relation("TicketReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+
+  assignedToId   String?
+  assignedTo     User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  bookingId      String?
+  booking        Booking?       @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  subject        String
+  description    String         @db.Text
+  priority       TicketPriority @default(MEDIUM)
+  status         DisputeStatus  @default(OPEN)
+  resolutionNotes String?       @db.Text
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([reporterId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([bookingId])
+}
+
+// -------------------------------------------------------------
+// ADMINISTRATIVE AUDIT LOGS
+// -------------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action      String   // E.g. "USER_ROLE_UPDATED", "ESCROW_PAYMENT_RELEASED", "WORKER_VERIFIED"
+  entityType  String   // "USER", "BOOKING", "ESCROW_PAYMENT", "SUPPORT_TICKET"
+  entityId    String
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
