@@ -11,11 +11,23 @@ const {
   getUserLedger,
   getEscrowProviderStatus
 } = require('../controllers/escrowController');
+const {
+  getRazorpayConfig,
+  createPaymentOrder,
+  verifyPayment,
+  handleWebhook
+} = require('../controllers/razorpayController');
 const { protect } = require('../middlewares/authMiddleware');
 
 router.get('/status', (req, res) => {
   res.json({ success: true, ...getEscrowProviderStatus() });
 });
+
+// Razorpay Payment Routes (Phase 6)
+router.get('/razorpay/config', getRazorpayConfig);
+router.post('/razorpay/create-order', protect, createPaymentOrder);
+router.post('/razorpay/verify-payment', protect, verifyPayment);
+router.post('/razorpay/webhook', handleWebhook);
 
 router.post('/fund', protect, fundEscrow);
 router.post('/release', protect, releaseEscrow);

@@ -1102,6 +1102,62 @@ window.localHireAPI = {
       }
       return [];
     }
+  },
+
+  razorpay: {
+    getConfig: async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/escrow/razorpay/config`);
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch (err) {
+        console.warn('[API Client] Server offline for razorpay config');
+      }
+      return { success: false, keyId: null };
+    },
+
+    createOrder: async (bookingId) => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/escrow/razorpay/create-order`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ bookingId })
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) {
+          return data;
+        }
+        return {
+          success: false,
+          message: data?.message || 'Failed to create Razorpay payment order'
+        };
+      } catch (err) {
+        console.warn('[API Client] Error calling razorpay createOrder:', err);
+      }
+      return { success: false, message: 'Unable to reach the payment server.' };
+    },
+
+    verifyPayment: async (verificationData) => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/escrow/razorpay/verify-payment`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(verificationData)
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) {
+          return data;
+        }
+        return {
+          success: false,
+          message: data?.message || 'Payment verification failed'
+        };
+      } catch (err) {
+        console.warn('[API Client] Error calling razorpay verifyPayment:', err);
+      }
+      return { success: false, message: 'Unable to reach the payment verification server.' };
+    }
   }
 };
 

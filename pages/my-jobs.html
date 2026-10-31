@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../css/escrow.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
 
@@ -313,22 +314,27 @@
                         `;
                     } else if (booking.status === 'IN_PROGRESS') {
                         actionButtons = `
-                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
-                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="COMPLETED" style="width: 100%; padding: 0.5rem 1rem; font-size: 0.85rem; background: #22c55e; border-color: #22c55e;">
+                            <div class="flex gap-2" style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
+                                <button class="btn btn-primary btn-booking-action" data-booking-id="${booking.id}" data-action="AWAITING_CUSTOMER_CONFIRMATION" style="flex: 1; padding: 0.5rem 0.75rem; font-size: 0.82rem; background: #2563eb; border-color: #2563eb;">
+                                    🏁 Finish &amp; Request Payment
+                                </button>
+                                <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="COMPLETED" style="padding: 0.5rem 0.75rem; font-size: 0.82rem; color: #22c55e; border-color: #22c55e;">
                                     Mark Complete
                                 </button>
                             </div>
                         `;
                     } else if (booking.status === 'AWAITING_CUSTOMER_CONFIRMATION') {
                         actionButtons = `
-                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem;">
-                                <div class="text-muted" style="font-size: 0.8rem; text-align: center;">Awaiting customer confirmation</div>
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
+                                <div class="escrow-badge escrow-held" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
+                                    ⏳ Service Complete — Awaiting Customer Payment via Razorpay
+                                </div>
                             </div>
                         `;
                     } else if (booking.status === 'COMPLETED') {
                         const isPaid = booking.payment && booking.payment.status === 'RELEASED_TO_WORKER';
                         if (isPaid) {
-                            const methodLabel = booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI');
+                            const methodLabel = booking.payment.gatewayProvider === 'RAZORPAY' ? 'Razorpay' : (booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI'));
                             actionButtons = `
                                 <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
                                     <div class="escrow-badge escrow-released" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
@@ -340,7 +346,7 @@
                             actionButtons = `
                                 <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
                                     <div class="escrow-badge escrow-held" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
-                                        ⏳ Service Complete — Awaiting Customer Escrow Release
+                                        ⏳ Service Complete — Awaiting Customer Payment Settlement
                                     </div>
                                 </div>
                             `;
@@ -373,29 +379,63 @@
                                 </button>
                             </div>
                         `;
+                    } else if (booking.status === 'AWAITING_CUSTOMER_CONFIRMATION') {
+                        const wName = escapeHTML(booking.worker ? (booking.worker.name || 'Worker') : 'Worker');
+                        const wAmount = Number(booking.agreedPrice || 0);
+                        actionButtons = `
+                            <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <div class="escrow-badge escrow-held" style="align-self: flex-start; font-size: 0.8rem;">🎉 Service Marked Complete by Worker — Confirm &amp; Pay</div>
+                                <button class="btn btn-primary btn-razorpay-pay"
+                                    data-booking-id="${booking.id}"
+                                    data-worker-name="${wName}"
+                                    data-amount="${wAmount}"
+                                    style="width: 100%; padding: 0.65rem 1rem; font-size: 0.92rem; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
+                                    ⚡ Pay ₹${wAmount} via Razorpay (UPI, Card, NetBanking)
+                                </button>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-outline btn-release-escrow"
+                                        data-booking-id="${booking.id}"
+                                        data-worker-name="${wName}"
+                                        data-amount="${wAmount}"
+                                        style="flex: 1; padding: 0.45rem 0.75rem; font-size: 0.8rem;">
+                                        Manual / Cash Settlement
+                                    </button>
+                                    <button class="btn btn-outline btn-booking-action" data-booking-id="${booking.id}" data-action="CANCELLED" style="padding: 0.45rem 0.75rem; font-size: 0.8rem; color: var(--danger); border-color: var(--danger);">
+                                        Dispute
+                                    </button>
+                                </div>
+                            </div>
+                        `;
                     } else if (booking.status === 'COMPLETED') {
                         const wName = escapeHTML(booking.worker ? (booking.worker.name || 'Worker') : 'Worker');
                         const wAmount = Number(booking.agreedPrice || 0);
                         const isPaid = booking.payment && booking.payment.status === 'RELEASED_TO_WORKER';
                         if (isPaid) {
-                            const methodLabel = booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI');
+                            const methodLabel = booking.payment.gatewayProvider === 'RAZORPAY' ? 'Razorpay' : (booking.payment.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash' : (booking.payment.paymentMethod || 'UPI'));
                             actionButtons = `
                                 <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 0.75rem;">
                                     <div class="escrow-badge escrow-released" style="width: 100%; text-align: center; justify-content: center; padding: 0.5rem; font-size: 0.82rem;">
-                                        ✅ Payment Released (₹${booking.payment.totalAmount} via ${methodLabel})
+                                        ✅ Payment Settled (₹${booking.payment.totalAmount} via ${methodLabel})
                                     </div>
                                 </div>
                             `;
                         } else {
                             actionButtons = `
                                 <div style="margin-top: 1rem; border-top: 1px dashed var(--border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                                    <div class="escrow-badge escrow-held" style="align-self: flex-start; font-size: 0.8rem;">🔔 Service Completed — Release Escrow Payment</div>
-                                    <button class="btn btn-primary btn-release-escrow"
+                                    <div class="escrow-badge escrow-held" style="align-self: flex-start; font-size: 0.8rem;">🔔 Service Completed — Please Settle Payment</div>
+                                    <button class="btn btn-primary btn-razorpay-pay"
                                         data-booking-id="${booking.id}"
                                         data-worker-name="${wName}"
                                         data-amount="${wAmount}"
-                                        style="width: 100%; padding: 0.6rem 1rem; font-size: 0.9rem; background: #22c55e; border-color: #22c55e; font-weight: 600;">
-                                        💸 Release Payment to Worker (UPI / Cash)
+                                        style="width: 100%; padding: 0.65rem 1rem; font-size: 0.92rem; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
+                                        ⚡ Pay ₹${wAmount} via Razorpay (UPI, Card, NetBanking)
+                                    </button>
+                                    <button class="btn btn-outline btn-release-escrow"
+                                        data-booking-id="${booking.id}"
+                                        data-worker-name="${wName}"
+                                        data-amount="${wAmount}"
+                                        style="width: 100%; padding: 0.5rem 1rem; font-size: 0.82rem;">
+                                        Manual Escrow / Cash Settlement
                                     </button>
                                 </div>
                             `;
@@ -665,6 +705,36 @@
                         alert(`❌ Could not update booking status: ${updateRes ? updateRes.message : 'Database unavailable'}`);
                         actionBtn.disabled = false;
                     }
+                }
+
+                // Customer "Pay via Razorpay" button — initiates Razorpay Checkout
+                const razorpayBtn = e.target.closest('.btn-razorpay-pay');
+                if (razorpayBtn) {
+                    const bookingId = razorpayBtn.getAttribute('data-booking-id');
+                    const workerName = razorpayBtn.getAttribute('data-worker-name');
+                    const amount = Number(razorpayBtn.getAttribute('data-amount') || 0);
+
+                    razorpayBtn.disabled = true;
+                    const origHtml = razorpayBtn.innerHTML;
+                    razorpayBtn.textContent = 'Opening Razorpay Checkout...';
+
+                    if (window.LocalHireEscrow && window.LocalHireEscrow.payWithRazorpay) {
+                        window.LocalHireEscrow.payWithRazorpay(bookingId, workerName, amount, (success, resultMsg) => {
+                            if (success) {
+                                alert('✅ Payment completed and verified via Razorpay! The service is now completed.');
+                                window.location.reload();
+                            } else {
+                                alert(resultMsg || 'Payment could not be completed. Please try again.');
+                                razorpayBtn.disabled = false;
+                                razorpayBtn.innerHTML = origHtml;
+                            }
+                        });
+                    } else {
+                        alert('Escrow payment module is not available. Please refresh the page.');
+                        razorpayBtn.disabled = false;
+                        razorpayBtn.innerHTML = origHtml;
+                    }
+                    return;
                 }
 
                 // Customer "Approve & Release Payment" button — opens UPI/Cash escrow release modal

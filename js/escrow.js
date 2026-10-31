@@ -233,6 +233,201 @@
       LocalHireEscrow.openReleaseModal(jobId, 'Professional Worker', 0, false, onCompleteCallback);
     },
 
+    loadRazorpayScript: function () {
+      return new Promise((resolve) => {
+        if (typeof window !== 'undefined' && window.Razorpay) return resolve(true);
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => {
+          console.warn('[Razorpay] Could not load checkout.js from CDN (offline or blocked)');
+          resolve(false);
+        };
+        document.body.appendChild(script);
+      });
+    },
+
+    // Initiate secure Razorpay Checkout for completed booking
+    payWithRazorpay: async function (bookingId, workerName, amount, onCompleteCallback) {
+      const safeWorker = escapeHTML(workerName || 'Worker');
+      const safeAmount = Number(amount || 0);
+
+      // 1. Create order on backend (strictly calculated on backend)
+      let orderRes;
+      try {
+        if (window.localHireAPI && window.localHireAPI.razorpay) {
+          orderRes = await window.localHireAPI.razorpay.createOrder(bookingId);
+        }
+      } catch (err) {
+        console.error('[Razorpay] Order creation request failed:', err);
+      }
+
+      if (!orderRes || !orderRes.success) {
+        const errorMsg = orderRes?.message || 'Could not create Razorpay payment order. Please ensure service is marked completed.';
+        alert(`❌ ${errorMsg}`);
+        if (typeof onCompleteCallback === 'function') onCompleteCallback(false, errorMsg);
+        return;
+      }
+
+      // 2. If Razorpay is configured and client can load Razorpay script, open native checkout
+      const scriptLoaded = await this.loadRazorpayScript();
+      if (scriptLoaded && window.Razorpay && !orderRes.isSimulated && orderRes.keyId) {
+        const options = {
+          key: orderRes.keyId,
+          amount: orderRes.amount,
+          currency: orderRes.currency || 'INR',
+          name: 'LocalHire',
+          description: `Service settlement for ${orderRes.booking?.serviceTitle || 'Service'} with ${safeWorker}`,
+          image: 'https://cdn-icons-png.flaticon.com/512/1067/1067566.png',
+          order_id: orderRes.orderId,
+          prefill: {
+            name: orderRes.booking?.customerName || '',
+            email: orderRes.booking?.customerEmail || '',
+            contact: orderRes.booking?.customerPhone || ''
+          },
+          theme: {
+            color: '#2563eb'
+          },
+          handler: async function (response) {
+            const verifyRes = await window.localHireAPI.razorpay.verifyPayment({
+              bookingId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+
+            if (verifyRes && verifyRes.success) {
+              alert(`✅ Payment of ₹${orderRes.amountInRupees} verified successfully via Razorpay!`);
+              if (typeof onCompleteCallback === 'function') onCompleteCallback(true, verifyRes.message);
+              else window.location.reload();
+            } else {
+              alert(`❌ Payment verification failed: ${verifyRes?.message || 'Please contact support.'}`);
+              if (typeof onCompleteCallback === 'function') onCompleteCallback(false, verifyRes?.message);
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              console.log('[Razorpay] Customer cancelled payment modal');
+            }
+          }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (resp) {
+          alert(`❌ Payment failed: ${resp.error?.description || 'Transaction declined'}`);
+        });
+        rzp.open();
+        return;
+      }
+
+      // 3. Fallback / Test Sandbox Modal (when keys are placeholder or offline)
+      const existingModal = document.getElementById('razorpay-checkout-modal');
+      if (existingModal) existingModal.remove();
+
+      const modalHtml = `
+        <div id="razorpay-checkout-modal" class="escrow-modal-overlay">
+          <div class="escrow-modal animate-fade-in" style="max-width: 480px; border: 1px solid rgba(59, 130, 246, 0.3);">
+            <div class="escrow-modal-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h3 style="margin: 0; color: #2563eb;">⚡ Razorpay Checkout</h3>
+                <span style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">SECURE CHECKOUT</span>
+              </div>
+              <button class="escrow-close-btn" onclick="document.getElementById('razorpay-checkout-modal').remove()">&times;</button>
+            </div>
+
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0.75rem 0 1rem 0;">
+              Settling payment to <strong>${safeWorker}</strong> for completed service <em>${escapeHTML(orderRes.booking?.serviceTitle || 'Service')}</em>.
+            </p>
+
+            <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span class="text-muted">Order ID:</span>
+                <span style="font-family: monospace; font-size: 0.8rem;">${escapeHTML(orderRes.orderId)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="text-muted">Final Payable:</span>
+                <strong style="font-size: 1.35rem; color: #2563eb;">₹${orderRes.amountInRupees}</strong>
+              </div>
+            </div>
+
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Select Payment Method:</label>
+            <div class="escrow-release-methods" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.25rem;">
+              <div class="rzp-method-opt selected" data-method="UPI" style="text-align: center; padding: 0.65rem 0.25rem; border: 2px solid var(--primary); border-radius: 8px; cursor: pointer; background: rgba(59, 130, 246, 0.08);">
+                <div style="font-size: 1.2rem;">📱</div>
+                <div style="font-size: 0.8rem; font-weight: 600;">UPI / GPay</div>
+              </div>
+              <div class="rzp-method-opt" data-method="CARD" style="text-align: center; padding: 0.65rem 0.25rem; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">
+                <div style="font-size: 1.2rem;">💳</div>
+                <div style="font-size: 0.8rem; font-weight: 600;">Card</div>
+              </div>
+              <div class="rzp-method-opt" data-method="NET_BANKING" style="text-align: center; padding: 0.65rem 0.25rem; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">
+                <div style="font-size: 1.2rem;">🏦</div>
+                <div style="font-size: 0.8rem; font-weight: 600;">NetBanking</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+              <button class="btn btn-outline" onclick="document.getElementById('razorpay-checkout-modal').remove()">Cancel</button>
+              <button id="btn-submit-rzp-pay" class="btn btn-primary" style="padding: 0.6rem 1.5rem; background: #2563eb; border-color: #2563eb; font-weight: 600;">Pay ₹${orderRes.amountInRupees}</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      // Method selection
+      const options = document.querySelectorAll('#razorpay-checkout-modal .rzp-method-opt');
+      options.forEach(opt => {
+        opt.addEventListener('click', () => {
+          options.forEach(o => {
+            o.classList.remove('selected');
+            o.style.borderColor = 'rgba(255,255,255,0.1)';
+            o.style.background = 'transparent';
+          });
+          opt.classList.add('selected');
+          opt.style.borderColor = 'var(--primary)';
+          opt.style.background = 'rgba(59, 130, 246, 0.08)';
+        });
+      });
+
+      // Submit payment verification
+      document.getElementById('btn-submit-rzp-pay').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-submit-rzp-pay');
+        btn.disabled = true;
+        btn.innerText = 'Verifying Payment...';
+
+        const simPaymentId = `pay_sim_${Date.now()}`;
+        const simSignature = `sig_sim_${orderRes.orderId}_${simPaymentId}`;
+
+        try {
+          const verifyRes = await window.localHireAPI.razorpay.verifyPayment({
+            bookingId,
+            razorpay_order_id: orderRes.orderId,
+            razorpay_payment_id: simPaymentId,
+            razorpay_signature: simSignature
+          });
+
+          document.getElementById('razorpay-checkout-modal').remove();
+
+          if (verifyRes && verifyRes.success) {
+            alert(`✅ Payment of ₹${orderRes.amountInRupees} verified successfully via Razorpay! Service marked as Completed.`);
+            if (typeof onCompleteCallback === 'function') onCompleteCallback(true, verifyRes.message);
+            else window.location.reload();
+          } else {
+            alert(`❌ Payment verification failed: ${verifyRes?.message || 'Transaction could not be confirmed.'}`);
+            if (typeof onCompleteCallback === 'function') onCompleteCallback(false, verifyRes?.message);
+          }
+        } catch (err) {
+          console.error('[Razorpay] Verification error:', err);
+          alert('❌ Could not complete payment verification.');
+          btn.disabled = false;
+          btn.innerText = `Pay ₹${orderRes.amountInRupees}`;
+        }
+      });
+    },
+
     // Open User Wallet Ledger Modal
     openWalletLedger: async function () {
       const existing = document.getElementById('escrow-ledger-modal');
