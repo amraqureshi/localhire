@@ -22,18 +22,26 @@ const isRazorpayConfigured = () => {
   );
 };
 
+const isSimulationAllowed = () => {
+  const mode = (process.env.ESCROW_PAYMENT_MODE || '').toUpperCase();
+  return mode === 'SIMULATED' && process.env.NODE_ENV !== 'production';
+};
+
 let razorpayInstance = null;
 
 const getRazorpayInstance = () => {
+  if (razorpayInstance) return razorpayInstance;
   if (!isRazorpayConfigured()) return null;
-  if (!razorpayInstance) {
-    const { keyId, keySecret } = getRazorpayCredentials();
-    razorpayInstance = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret
-    });
-  }
+  const { keyId, keySecret } = getRazorpayCredentials();
+  razorpayInstance = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret
+  });
   return razorpayInstance;
+};
+
+const setRazorpayInstance = (instance) => {
+  razorpayInstance = instance;
 };
 
 // Constant-time string comparison to prevent timing attacks
@@ -79,7 +87,9 @@ const verifyWebhookSignature = ({ rawBody, signature }) => {
 module.exports = {
   getRazorpayCredentials,
   isRazorpayConfigured,
+  isSimulationAllowed,
   getRazorpayInstance,
+  setRazorpayInstance,
   verifyPaymentSignature,
   verifyWebhookSignature,
   safeCompare

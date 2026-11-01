@@ -1,10 +1,12 @@
 // LocalHire - Razorpay Payment Controller
 // Handles Razorpay order creation, payment signature verification, idempotency, and secure webhook processing.
+// Enforces single escrow state machine: PENDING -> HELD_IN_ESCROW -> RELEASED_TO_WORKER.
 
 const prisma = require('../config/prisma');
 const {
   getRazorpayCredentials,
   isRazorpayConfigured,
+  isSimulationAllowed,
   getRazorpayInstance,
   verifyPaymentSignature,
   verifyWebhookSignature,
@@ -24,11 +26,12 @@ exports.getRazorpayConfig = (req, res) => {
     success: true,
     keyId: isRazorpayConfigured() ? keyId : null,
     isConfigured: isRazorpayConfigured(),
+    isSimulated: isSimulationAllowed() && !isRazorpayConfigured(),
     currency: 'INR'
   });
 };
 
-// @desc    Create Razorpay Order for a completed/ready booking
+// @desc    Create Razorpay Order for an active booking
 // @route   POST /api/escrow/razorpay/create-order
 // @access  Private (Customer)
 exports.createPaymentOrder = async (req, res) => {
@@ -62,21 +65,22 @@ exports.createPaymentOrder = async (req, res) => {
       });
     }
 
-    // 2. Service completion eligibility check:
-    // Worker must have marked service completed or awaiting customer confirmation
-    const eligibleStatuses = ['COMPLETED', 'AWAITING_CUSTOMER_CONFIRMATION'];
-    if (!eligibleStatuses.includes(booking.status)) {
+    // 2. Booking state check: Cannot pay for cancelled or disputed bookings
+    const ineligibleStatuses = ['CANCELLED', 'DISPUTED'];
+    if (ineligibleStatuses.includes(booking.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Payment is only permitted after the worker has completed the service'
+        message: `Cannot initiate payment for a booking with status ${booking.status}`
       });
     }
 
-    // 3. Prevent duplicate successful payments
-    if (booking.payment && (booking.payment.status === 'RELEASED_TO_WORKER' || booking.payment.status === 'HELD_IN_ESCROW')) {
+    // 3. Prevent duplicate payment orders if already funded or completed
+    if (booking.payment && ['HELD_IN_ESCROW', 'RELEASED_TO_WORKER'].includes(booking.payment.status)) {
       return res.status(409).json({
         success: false,
-        message: 'Payment has already been successfully completed for this booking'
+        message: booking.payment.status === 'HELD_IN_ESCROW'
+          ? 'Payment has already been held in escrow for this booking'
+          : 'Payment has already been successfully completed for this booking'
       });
     }
 
@@ -92,7 +96,7 @@ exports.createPaymentOrder = async (req, res) => {
     // Razorpay requires amounts in paise (1 INR = 100 paise)
     const amountPaise = Math.round(amountNum * 100);
 
-    // 5. Create Razorpay order via SDK (or sandbox mock if unconfigured in dev)
+    // 5. Create Razorpay order via SDK (or sandbox mock if in SIMULATED mode)
     const razorpay = getRazorpayInstance();
     let razorpayOrder;
 
@@ -117,8 +121,8 @@ exports.createPaymentOrder = async (req, res) => {
           details: sdkError.error?.description || sdkError.message
         });
       }
-    } else {
-      // Safe sandbox fallback for testing when keys are placeholder
+    } else if (isSimulationAllowed()) {
+      // Safe sandbox fallback ONLY when mode is SIMULATED and not production
       const randomSuffix = Math.floor(100000 + Math.random() * 900000);
       razorpayOrder = {
         id: `order_sim_${Date.now()}_${randomSuffix}`,
@@ -132,13 +136,18 @@ exports.createPaymentOrder = async (req, res) => {
           workerId: booking.workerId
         }
       };
+    } else {
+      return res.status(503).json({
+        success: false,
+        message: 'Payment gateway is currently unavailable. Razorpay API keys are not configured and simulation is disabled.'
+      });
     }
 
     // 6. Persist or update order record in EscrowPayment
     const invSuffix = Math.floor(100000 + Math.random() * 900000);
     const invoiceNumber = booking.payment?.invoiceNumber || `INV-${new Date().getFullYear()}-${invSuffix}`;
 
-    const escrowRecord = await prisma.escrowPayment.upsert({
+    await prisma.escrowPayment.upsert({
       where: { bookingId: booking.id },
       create: {
         invoiceNumber,
@@ -174,8 +183,8 @@ exports.createPaymentOrder = async (req, res) => {
       amount: amountPaise,
       amountInRupees: amountNum,
       currency: 'INR',
-      keyId: isRazorpayConfigured() ? keyId : 'rzp_test_simulated',
-      isSimulated: !isRazorpayConfigured(),
+      keyId: isRazorpayConfigured() ? keyId : (isSimulationAllowed() ? 'rzp_test_simulated' : null),
+      isSimulated: isSimulationAllowed() && !isRazorpayConfigured(),
       booking: {
         id: booking.id,
         bookingNumber: booking.bookingNumber,
@@ -196,7 +205,7 @@ exports.createPaymentOrder = async (req, res) => {
   }
 };
 
-// @desc    Verify Razorpay payment signature & settle booking
+// @desc    Verify Razorpay payment signature & hold funds in Escrow
 // @route   POST /api/escrow/razorpay/verify-payment
 // @access  Private (Customer)
 exports.verifyPayment = async (req, res) => {
@@ -224,12 +233,22 @@ exports.verifyPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // 1. Authorization: Only the booking owner can verify and settle
+    // 1. Authorization: Only the booking owner can verify payment
     if (booking.customerId !== currentUserId && req.user.role !== 'Admin') {
       return res.status(403).json({ success: false, message: 'Not authorized to verify payment for this booking' });
     }
 
-    // 2. Idempotency: If payment was already completed, return success safely
+    // 2. Idempotency: If payment was already verified or released, return success safely
+    if (booking.payment && booking.payment.status === 'HELD_IN_ESCROW') {
+      return res.json({
+        success: true,
+        message: 'Payment has already been verified and is held in escrow.',
+        alreadyProcessed: true,
+        booking: { id: booking.id, status: booking.status },
+        payment: booking.payment
+      });
+    }
+
     if (booking.payment && booking.payment.status === 'RELEASED_TO_WORKER') {
       return res.json({
         success: true,
@@ -240,7 +259,38 @@ exports.verifyPayment = async (req, res) => {
       });
     }
 
-    // 3. Cryptographic Signature Verification using HMAC SHA256
+    if (booking.payment && booking.payment.status === 'REFUNDED_TO_CUSTOMER') {
+      return res.status(409).json({
+        success: false,
+        message: 'Payment has already been refunded.',
+        alreadyProcessed: true
+      });
+    }
+
+    // 3. Amount, Currency & Order matching (Requirement 4)
+    if (booking.payment?.gatewayOrderId && booking.payment.gatewayOrderId !== razorpay_order_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed: order ID does not match payment record.'
+      });
+    }
+
+    const priceNum = Number(booking.agreedPrice || 0);
+    if (booking.payment && Number(booking.payment.totalAmount) !== priceNum) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed: amount mismatch with agreed price.'
+      });
+    }
+
+    if (booking.payment && booking.payment.currency && booking.payment.currency !== 'INR') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment verification failed: unsupported currency.'
+      });
+    }
+
+    // 4. Cryptographic Signature Verification using HMAC SHA256 (Requirement 3)
     let isSignatureValid = false;
 
     if (isRazorpayConfigured()) {
@@ -249,19 +299,16 @@ exports.verifyPayment = async (req, res) => {
         paymentId: razorpay_payment_id,
         signature: razorpay_signature
       });
-    } else {
-      // Safe simulation fallback for test environments
+    } else if (isSimulationAllowed()) {
       isSignatureValid = (
         razorpay_order_id.startsWith('order_sim_') &&
         razorpay_payment_id.startsWith('pay_sim_') &&
         razorpay_signature === `sig_sim_${razorpay_order_id}_${razorpay_payment_id}`
-      ) || (
-        verifyPaymentSignature({
-          orderId: razorpay_order_id,
-          paymentId: razorpay_payment_id,
-          signature: razorpay_signature
-        })
-      );
+      ) || verifyPaymentSignature({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature
+      });
     }
 
     if (!isSignatureValid) {
@@ -272,10 +319,9 @@ exports.verifyPayment = async (req, res) => {
       });
     }
 
-    // 4. Atomic transaction: Mark payment RELEASED_TO_WORKER and booking COMPLETED
+    // 5. Atomic transaction: Mark payment HELD_IN_ESCROW (NEVER RELEASED_TO_WORKER or COMPLETED!)
     const result = await prisma.$transaction(async (tx) => {
       const invSuffix = Math.floor(100000 + Math.random() * 900000);
-      const priceNum = Number(booking.agreedPrice || 0);
 
       const updatedPayment = await tx.escrowPayment.upsert({
         where: { bookingId: booking.id },
@@ -290,34 +336,34 @@ exports.verifyPayment = async (req, res) => {
           workerPayoutAmount: priceNum,
           totalAmount: priceNum,
           currency: 'INR',
-          status: 'RELEASED_TO_WORKER',
+          status: 'HELD_IN_ESCROW',
           paymentMethod: 'UPI',
           gatewayProvider: 'RAZORPAY',
           gatewayOrderId: razorpay_order_id,
           gatewayPaymentId: razorpay_payment_id,
           gatewaySignature: razorpay_signature,
-          releasedAt: new Date()
+          heldAt: new Date()
         },
         update: {
-          status: 'RELEASED_TO_WORKER',
+          status: 'HELD_IN_ESCROW',
           gatewayOrderId: razorpay_order_id,
           gatewayPaymentId: razorpay_payment_id,
           gatewaySignature: razorpay_signature,
-          releasedAt: new Date()
+          heldAt: new Date()
         }
       });
 
+      const nextBookingStatus = booking.status === 'REQUESTED' ? 'CONFIRMED' : booking.status;
       const updatedBooking = await tx.booking.update({
         where: { id: booking.id },
         data: {
-          status: 'COMPLETED',
-          completedAt: booking.completedAt || new Date(),
+          status: nextBookingStatus,
           statusHistory: {
             create: {
               fromStatus: booking.status,
-              toStatus: 'COMPLETED',
+              toStatus: nextBookingStatus,
               changedById: currentUserId,
-              reason: `Payment confirmed via Razorpay (Payment ID: ${razorpay_payment_id})`
+              reason: `Payment held in escrow via Razorpay (Payment ID: ${razorpay_payment_id})`
             }
           }
         },
@@ -330,39 +376,39 @@ exports.verifyPayment = async (req, res) => {
       return { payment: updatedPayment, booking: updatedBooking };
     });
 
-    // 5. Broadcast real-time status change over Socket.IO and terminate live tracking
-    broadcastBookingStatus(booking.id, 'COMPLETED', {
+    // 6. Broadcast real-time status update over Socket.IO
+    broadcastBookingStatus(booking.id, result.booking.status, {
       booking: result.booking,
       changedById: currentUserId,
       payment: {
         id: result.payment.id,
         amount: Number(result.payment.totalAmount),
+        status: 'HELD_IN_ESCROW',
         paymentId: razorpay_payment_id
       }
     });
-    stopBookingTracking(booking.id, 'Service completed and paid.');
 
-    // 6. Send in-app notifications
+    // 7. Send in-app notifications
     await Promise.all([
       notifyUser({
         userId: booking.customerId,
-        type: 'PAYMENT_RELEASED',
-        title: 'Payment successful',
-        message: `Your payment of ₹${result.payment.totalAmount} for ${booking.worker?.name || 'the worker'} was successful.`,
+        type: 'PAYMENT_HELD',
+        title: 'Payment held in escrow',
+        message: `Your payment of ₹${result.payment.totalAmount} is securely held in escrow. Funds will be released when you confirm job completion.`,
         linkUrl: `/bookings/${booking.id}`
       }),
       notifyUser({
         userId: booking.workerId,
-        type: 'PAYMENT_RELEASED',
-        title: 'Payment received',
-        message: `Payment of ₹${result.payment.totalAmount} was released to you by ${booking.customer?.name || 'the customer'}.`,
+        type: 'PAYMENT_HELD',
+        title: 'Payment secured in escrow',
+        message: `Payment of ₹${result.payment.totalAmount} has been secured in escrow by ${booking.customer?.name || 'the customer'}.`,
         linkUrl: `/bookings/${booking.id}`
       })
     ]);
 
     return res.json({
       success: true,
-      message: 'Payment verified and service marked as Completed.',
+      message: 'Payment verified and held in escrow.',
       payment: result.payment,
       booking: result.booking
     });
@@ -427,42 +473,57 @@ exports.handleWebhook = async (req, res) => {
         return res.json({ status: 'ok', message: 'Payment record not yet created' });
       }
 
-      // Idempotency: Never overwrite an already settled payment
+      // Idempotency: Never overwrite an already held, released or refunded payment
+      if (existingPayment.status === 'HELD_IN_ESCROW') {
+        return res.json({ status: 'ok', message: 'Payment already held in escrow' });
+      }
       if (existingPayment.status === 'RELEASED_TO_WORKER') {
-        return res.json({ status: 'ok', message: 'Payment already processed' });
+        return res.json({ status: 'ok', message: 'Payment already released to worker' });
+      }
+      if (existingPayment.status === 'REFUNDED_TO_CUSTOMER') {
+        return res.json({ status: 'ok', message: 'Payment already refunded' });
       }
 
+      // Requirement 4: Verify captured amount and currency
+      if (paymentEntity?.amount !== undefined) {
+        const expectedPaise = Math.round(Number(existingPayment.totalAmount) * 100);
+        if (paymentEntity.amount !== expectedPaise) {
+          console.warn(`[Razorpay Webhook] Amount mismatch: received ${paymentEntity.amount} paise, expected ${expectedPaise} paise`);
+          return res.status(400).json({ success: false, message: 'Webhook captured amount mismatch' });
+        }
+      }
+      if (paymentEntity?.currency && paymentEntity.currency !== (existingPayment.currency || 'INR')) {
+        console.warn(`[Razorpay Webhook] Currency mismatch: received ${paymentEntity.currency}`);
+        return res.status(400).json({ success: false, message: 'Webhook captured currency mismatch' });
+      }
+
+      // Requirement 1: Webhook sets HELD_IN_ESCROW, NOT RELEASED_TO_WORKER or COMPLETED
       await prisma.$transaction(async (tx) => {
         await tx.escrowPayment.update({
           where: { id: existingPayment.id },
           data: {
-            status: 'RELEASED_TO_WORKER',
+            status: 'HELD_IN_ESCROW',
             gatewayPaymentId: paymentId || existingPayment.gatewayPaymentId,
-            releasedAt: new Date()
+            heldAt: existingPayment.heldAt || new Date()
           }
         });
 
-        if (existingPayment.bookingId) {
+        if (existingPayment.bookingId && existingPayment.booking?.status === 'REQUESTED') {
           await tx.booking.update({
             where: { id: existingPayment.bookingId },
             data: {
-              status: 'COMPLETED',
-              completedAt: existingPayment.booking?.completedAt || new Date(),
+              status: 'CONFIRMED',
               statusHistory: {
                 create: {
-                  fromStatus: existingPayment.booking?.status || 'IN_PROGRESS',
-                  toStatus: 'COMPLETED',
-                  reason: `Webhook confirmed payment capture (${paymentId || orderId})`
+                  fromStatus: existingPayment.booking.status,
+                  toStatus: 'CONFIRMED',
+                  reason: `Webhook confirmed payment held in escrow (${paymentId || orderId})`
                 }
               }
             }
           });
         }
       });
-
-      if (existingPayment.bookingId) {
-        stopBookingTracking(existingPayment.bookingId, 'Service completed via webhook payment capture.');
-      }
     }
 
     // 3. Handle Payment Failed
@@ -476,8 +537,8 @@ exports.handleWebhook = async (req, res) => {
           where: { gatewayOrderId: orderId }
         });
 
-        // Never overwrite an already successful payment
-        if (existingPayment && existingPayment.status !== 'RELEASED_TO_WORKER') {
+        // Never overwrite an already held or successful payment
+        if (existingPayment && existingPayment.status !== 'RELEASED_TO_WORKER' && existingPayment.status !== 'HELD_IN_ESCROW') {
           await prisma.escrowPayment.update({
             where: { id: existingPayment.id },
             data: {

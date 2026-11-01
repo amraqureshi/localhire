@@ -23,6 +23,40 @@ if (!process.env.DATABASE_URL) {
   console.error('[FATAL] DATABASE_URL environment variable is not set.');
   process.exit(1);
 }
+
+// ─── Payment & Escrow environment guard ───────────────────────────────────────
+const escrowMode = (process.env.ESCROW_PAYMENT_MODE || 'LIVE').toUpperCase();
+const isDev = process.env.NODE_ENV !== 'production';
+
+if (escrowMode === 'SIMULATED') {
+  if (!isDev) {
+    console.error('[FATAL] ESCROW_PAYMENT_MODE cannot be SIMULATED in production.');
+    process.exit(1);
+  }
+  console.log('[Server] Escrow running in SIMULATED sandbox mode. Simulated payments enabled.');
+} else {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const isKeyConfigured = Boolean(
+    keyId &&
+    keySecret &&
+    !keyId.includes('replace_with') &&
+    !keyId.includes('your_') &&
+    !keySecret.includes('replace_with') &&
+    !keySecret.includes('your_')
+  );
+
+  if (!isKeyConfigured) {
+    console.warn('[Payment Gateway] Warning: LIVE payment mode is active but valid Razorpay credentials (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET) are missing or set to placeholder values.');
+    console.warn('[Payment Gateway] Online gateway payments will be marked UNAVAILABLE until valid keys are configured in server/.env.');
+    if (!isDev) {
+      console.error('[FATAL] Valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are mandatory in production.');
+      process.exit(1);
+    }
+  } else {
+    console.log('[Server] Razorpay gateway credentials verified.');
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Import Routes

@@ -7,6 +7,7 @@ const {
   fundEscrow,
   releaseEscrow,
   disputeEscrow,
+  refundEscrow,
   getJobEscrow,
   getUserLedger,
   getEscrowProviderStatus
@@ -32,6 +33,7 @@ router.post('/razorpay/webhook', handleWebhook);
 router.post('/fund', protect, fundEscrow);
 router.post('/release', protect, releaseEscrow);
 router.post('/dispute', protect, disputeEscrow);
+router.post('/refund', protect, refundEscrow);
 router.get('/job/:jobId', protect, getJobEscrow);
 router.get('/booking/:bookingId', protect, getJobEscrow);
 router.get('/ledger', protect, getUserLedger);

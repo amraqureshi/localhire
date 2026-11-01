@@ -298,7 +298,7 @@
             });
 
             if (verifyRes && verifyRes.success) {
-              alert(`✅ Payment of ₹${orderRes.amountInRupees} verified successfully via Razorpay!`);
+              alert(`✅ Payment of ₹${orderRes.amountInRupees} verified and securely held in escrow! Funds will be released to the worker once service is completed and confirmed.`);
               if (typeof onCompleteCallback === 'function') onCompleteCallback(true, verifyRes.message);
               else window.location.reload();
             } else {
@@ -321,7 +321,15 @@
         return;
       }
 
-      // 3. Fallback / Test Sandbox Modal (when keys are placeholder or offline)
+      // If in LIVE mode and native checkout cannot open, do NOT allow spoofed simulated payment
+      if (!orderRes.isSimulated) {
+        const unavailMsg = '⚠️ Online payment gateway is currently unavailable because Razorpay credentials are not configured. Please use Cash on Service or contact support.';
+        alert(unavailMsg);
+        if (typeof onCompleteCallback === 'function') onCompleteCallback(false, unavailMsg);
+        return;
+      }
+
+      // 3. Fallback / Test Sandbox Modal (ONLY when ESCROW_PAYMENT_MODE is SIMULATED)
       const existingModal = document.getElementById('razorpay-checkout-modal');
       if (existingModal) existingModal.remove();
 
@@ -331,13 +339,13 @@
             <div class="escrow-modal-header">
               <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 style="margin: 0; color: #2563eb;">⚡ Razorpay Checkout</h3>
-                <span style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">SECURE CHECKOUT</span>
+                <span style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">SIMULATED SANDBOX</span>
               </div>
               <button class="escrow-close-btn" onclick="document.getElementById('razorpay-checkout-modal').remove()">&times;</button>
             </div>
 
             <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0.75rem 0 1rem 0;">
-              Settling payment to <strong>${safeWorker}</strong> for completed service <em>${escapeHTML(orderRes.booking?.serviceTitle || 'Service')}</em>.
+              Simulating payment to hold funds in escrow for <strong>${safeWorker}</strong> on service <em>${escapeHTML(orderRes.booking?.serviceTitle || 'Service')}</em>.
             </p>
 
             <div style="background: rgba(0,0,0,0.03); border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem;">
@@ -369,7 +377,7 @@
 
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
               <button class="btn btn-outline" onclick="document.getElementById('razorpay-checkout-modal').remove()">Cancel</button>
-              <button id="btn-submit-rzp-pay" class="btn btn-primary" style="padding: 0.6rem 1.5rem; background: #2563eb; border-color: #2563eb; font-weight: 600;">Pay ₹${orderRes.amountInRupees}</button>
+              <button id="btn-submit-rzp-pay" class="btn btn-primary" style="padding: 0.6rem 1.5rem; background: #2563eb; border-color: #2563eb; font-weight: 600;">Pay & Hold ₹${orderRes.amountInRupees}</button>
             </div>
           </div>
         </div>
@@ -412,7 +420,7 @@
           document.getElementById('razorpay-checkout-modal').remove();
 
           if (verifyRes && verifyRes.success) {
-            alert(`✅ Payment of ₹${orderRes.amountInRupees} verified successfully via Razorpay! Service marked as Completed.`);
+            alert(`✅ [SANDBOX] Payment of ₹${orderRes.amountInRupees} verified and held in escrow! Funds will be released when service completion is approved.`);
             if (typeof onCompleteCallback === 'function') onCompleteCallback(true, verifyRes.message);
             else window.location.reload();
           } else {
@@ -423,9 +431,31 @@
           console.error('[Razorpay] Verification error:', err);
           alert('❌ Could not complete payment verification.');
           btn.disabled = false;
-          btn.innerText = `Pay ₹${orderRes.amountInRupees}`;
+          btn.innerText = `Pay & Hold ₹${orderRes.amountInRupees}`;
         }
       });
+    },
+
+    // Refund escrow payment back to customer
+    refundPayment: async function (bookingId, reason, onCompleteCallback) {
+      if (!confirm('Are you sure you want to cancel this booking and request a refund of escrow funds?')) {
+        return;
+      }
+      try {
+        const res = await window.localHireAPI.escrow.refundEscrow(bookingId, reason || 'Customer requested cancellation & refund', true);
+        if (res && res.success) {
+          alert('✅ Escrow refund initiated successfully! Booking has been cancelled.');
+          if (typeof onCompleteCallback === 'function') onCompleteCallback(true, res.message);
+          else window.location.reload();
+        } else {
+          alert(`❌ Refund failed: ${res?.message || 'Please contact support.'}`);
+          if (typeof onCompleteCallback === 'function') onCompleteCallback(false, res?.message);
+        }
+      } catch (err) {
+        console.error('[Escrow] Refund error:', err);
+        alert('❌ Could not process refund request.');
+        if (typeof onCompleteCallback === 'function') onCompleteCallback(false, err.message);
+      }
     },
 
     // Open User Wallet Ledger Modal

@@ -1132,6 +1132,28 @@ window.localHireAPI = {
       return { success: false, message: 'Unable to reach the LocalHire escrow server.' };
     },
 
+    refundEscrow: async (jobIdOrBookingId, reason, isBooking = false) => {
+      try {
+        const payload = isBooking ? { bookingId: jobIdOrBookingId, reason } : { jobId: jobIdOrBookingId, reason };
+        const res = await fetch(`${API_BASE_URL}/escrow/refund`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) {
+          return data;
+        }
+        return {
+          success: false,
+          message: data?.message || 'Escrow refund failed'
+        };
+      } catch (err) {
+        console.warn('[API Client] Server offline for refundEscrow');
+      }
+      return { success: false, message: 'Unable to reach the LocalHire escrow server.' };
+    },
+
     getJobEscrow: async (jobId) => {
       try {
         const res = await fetch(`${API_BASE_URL}/escrow/job/${jobId}`, {

@@ -99,6 +99,8 @@ test('Batch B: fundEscrow rejects already completed or cancelled bookings', asyn
 });
 
 test('Batch B: fundEscrow performs atomic creation and sets SIMULATED status', async () => {
+  const prevMode = process.env.ESCROW_PAYMENT_MODE;
+  process.env.ESCROW_PAYMENT_MODE = 'SIMULATED';
   const origFindUnique = prisma.booking.findUnique;
   const origTransaction = prisma.$transaction;
 
@@ -166,10 +168,14 @@ test('Batch B: fundEscrow performs atomic creation and sets SIMULATED status', a
   } finally {
     prisma.booking.findUnique = origFindUnique;
     prisma.$transaction = origTransaction;
+    if (prevMode !== undefined) process.env.ESCROW_PAYMENT_MODE = prevMode;
+    else delete process.env.ESCROW_PAYMENT_MODE;
   }
 });
 
 test('Batch B: fundEscrow returns 409 Conflict if escrow already funded', async () => {
+  const prevMode = process.env.ESCROW_PAYMENT_MODE;
+  process.env.ESCROW_PAYMENT_MODE = 'SIMULATED';
   const origFindUnique = prisma.booking.findUnique;
   const origTransaction = prisma.$transaction;
 
@@ -202,6 +208,8 @@ test('Batch B: fundEscrow returns 409 Conflict if escrow already funded', async 
   } finally {
     prisma.booking.findUnique = origFindUnique;
     prisma.$transaction = origTransaction;
+    if (prevMode !== undefined) process.env.ESCROW_PAYMENT_MODE = prevMode;
+    else delete process.env.ESCROW_PAYMENT_MODE;
   }
 });
 
