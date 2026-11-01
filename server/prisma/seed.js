@@ -122,13 +122,22 @@ async function main() {
   // 3. Fictional Users (Admin, Customer, and Professionals)
   console.log('[Seed] Seeding fictional accounts...');
 
-  // Admin Account
+  // Admin Account (Configured via ADMIN_EMAIL and ADMIN_PASSWORD env vars)
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@localhire.dev';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'DevPass@2026!';
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@localhire.dev' },
-    update: {},
+    where: { email: adminEmail },
+    update: {
+      passwordHash: adminPasswordHash,
+      role: 'ADMIN',
+      isActive: true,
+      isEmailVerified: true
+    },
     create: {
-      email: 'admin@localhire.dev',
-      passwordHash: devPasswordHash,
+      email: adminEmail,
+      passwordHash: adminPasswordHash,
       name: 'Governance Admin',
       phone: '+91 90000 00001',
       role: 'ADMIN',
@@ -137,6 +146,7 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=AdminGov'
     }
   });
+  console.log(`[Seed] Seeded Admin account: ${adminEmail}`);
 
   // Customer Account
   const customerUser = await prisma.user.upsert({

@@ -904,78 +904,102 @@ window.localHireAPI = {
 
   // Admin Portal API
   getAdminMetrics: async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/metrics`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.metrics;
-      }
-    } catch (err) {
-      console.warn('[API Client] Server offline, building local admin metrics');
+    const res = await fetch(`${API_BASE_URL}/admin/metrics`, {
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data.metrics;
     }
-    const users = window.localHireApp.getUsers();
-    const jobs = window.localHireApp.getJobs();
-    const apps = window.localHireApp.getApplications();
-    return {
-      totalUsers: users.length,
-      totalWorkers: users.filter(u => u.role === 'Worker').length,
-      totalCustomers: users.filter(u => u.role === 'Customer').length,
-      totalJobs: jobs.length,
-      activeJobs: jobs.filter(j => j.status === 'Open' || j.status === 'In Progress').length,
-      completedJobs: jobs.filter(j => j.status === 'Completed').length,
-      totalApplications: apps.length
-    };
+    throw new Error(data.message || 'Failed to fetch admin metrics');
   },
 
-  getAdminUsers: async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/users`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.users;
+  getAdminUsers: async (params = {}) => {
+    const cleanParams = {};
+    Object.keys(params).forEach(k => {
+      if (params[k] !== undefined && params[k] !== null && params[k] !== '') {
+        cleanParams[k] = params[k];
       }
-    } catch (err) {
-      console.warn('[API Client] Server offline, returning local users for admin');
+    });
+    const query = new URLSearchParams(cleanParams).toString();
+    const url = `${API_BASE_URL}/admin/users${query ? '?' + query : ''}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
     }
-    return window.localHireApp.getUsers();
+    throw new Error(data.message || 'Failed to fetch admin users');
+  },
+
+  verifyAdminUser: async (userId, status = 'VERIFIED', notes = '') => {
+    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/verify`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status, notes })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
+    }
+    throw new Error(data.message || 'Failed to update user verification');
   },
 
   deleteAdminUser: async (userId) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        return { success: true };
-      }
-    } catch (err) {
-      console.warn('[API Client] Server offline, deleting user locally');
+    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
     }
-    const users = window.localHireApp.getUsers().filter(u => u.id !== userId);
-    localStorage.setItem('localHire_users', JSON.stringify(users));
-    return { success: true };
+    throw new Error(data.message || 'Failed to delete user');
+  },
+
+  getAdminJobs: async (params = {}) => {
+    const cleanParams = {};
+    Object.keys(params).forEach(k => {
+      if (params[k] !== undefined && params[k] !== null && params[k] !== '') {
+        cleanParams[k] = params[k];
+      }
+    });
+    const query = new URLSearchParams(cleanParams).toString();
+    const url = `${API_BASE_URL}/admin/jobs${query ? '?' + query : ''}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
+    }
+    throw new Error(data.message || 'Failed to fetch admin jobs');
+  },
+
+  flagAdminJob: async (jobId, reason = '', isFlagged = true) => {
+    const res = await fetch(`${API_BASE_URL}/admin/jobs/${jobId}/flag`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ reason, isFlagged })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
+    }
+    throw new Error(data.message || 'Failed to flag job');
   },
 
   deleteAdminJob: async (jobId) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/jobs/${jobId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        return { success: true };
-      }
-    } catch (err) {
-      console.warn('[API Client] Server offline, deleting job locally');
+    const res = await fetch(`${API_BASE_URL}/admin/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return data;
     }
-    const jobs = window.localHireApp.getJobs().filter(j => j.id !== jobId);
-    localStorage.setItem('localHire_jobs', JSON.stringify(jobs));
-    return { success: true };
+    throw new Error(data.message || 'Failed to delete job');
   },
 
   // Escrow & Milestone Payment API Services

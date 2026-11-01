@@ -45,6 +45,7 @@ enum JobStatus {
   COMPLETED
   CANCELLED
   EXPIRED
+  FLAGGED
 }
 
 enum ApplicationStatus {
@@ -124,6 +125,7 @@ model User {
   avatarUrl       String?
   isActive        Boolean            @default(true)
   isEmailVerified Boolean            @default(false)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -166,6 +168,7 @@ model User {
   @@index([email])
   @@index([role])
   @@index([isActive])
+  @@index([verificationStatus])
 }
 
 // -------------------------------------------------------------
@@ -413,6 +416,9 @@ model JobPost {
   budgetMin        Decimal?         @db.Decimal(10, 2)
   budgetMax        Decimal?         @db.Decimal(10, 2)
   status           JobStatus        @default(OPEN)
+  isFlagged        Boolean          @default(false)
+  flagReason       String?          @db.Text
+  flaggedAt        DateTime?
 
   applications     JobApplication[]
   booking          Booking?
@@ -423,6 +429,7 @@ model JobPost {
   @@index([customerId])
   @@index([categoryId])
   @@index([status])
+  @@index([isFlagged])
   @@index([createdAt])
 }
 

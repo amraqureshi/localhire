@@ -72,10 +72,36 @@ Example:
 
 ---
 
-## 📂 Installation
+## 📂 Installation & Running
 
 ```bash
-git clone https://github.com/alinabagwan/LOCALHIRE_MAIN.git
-cd LOCALHIRE_MAIN
+git clone https://github.com/amraqureshi/localhire.git
+cd LOCALHIRE_MAIN-main
 npm install
-npm start
+npm --prefix server install
+npm run dev
+```
+
+The entire application (backend API, WebSocket server, and static frontend) runs on port **5000** (`http://localhost:5000`).
+
+---
+
+## 🛡️ Admin Account Setup & Governance
+
+For security reasons, **public registration does not allow registering with an Admin role** (`authController` strictly blocks unprivileged role escalation).
+
+To bootstrap an Administrator account, configure `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `server/.env`:
+
+```env
+ADMIN_EMAIL=admin@localhire.dev
+ADMIN_PASSWORD=YourSecurePassword123!
+```
+
+Then execute the database seed script:
+
+```bash
+npm --prefix server run prisma:seed
+```
+
+This creates or updates the administrative user in the PostgreSQL database. You can then log in at `http://localhost:5000/pages/auth.html` using the configured credentials and access the **Admin Governance Console** at `http://localhost:5000/pages/admin.html`.
+

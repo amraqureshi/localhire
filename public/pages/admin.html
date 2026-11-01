@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Portal | LocalHire</title>
+    <title>Admin Governance Console | LocalHire</title>
     <link rel="stylesheet" href="../css/style.css">
     <style>
         .admin-table {
@@ -16,23 +16,157 @@
             text-align: left;
             border-bottom: 1px solid var(--border-light);
             font-size: 0.9rem;
+            vertical-align: middle;
         }
         .admin-table th {
             font-weight: 600;
             color: var(--text-muted);
             background: rgba(0, 0, 0, 0.02);
         }
+        .badge-verified {
+            background: rgba(110, 231, 183, 0.25);
+            color: #065f46;
+            border: 1px solid rgba(110, 231, 183, 0.6);
+        }
+        .badge-pending {
+            background: rgba(252, 211, 77, 0.25);
+            color: #92400e;
+            border: 1px solid rgba(252, 211, 77, 0.6);
+        }
+        .badge-rejected {
+            background: rgba(252, 165, 165, 0.25);
+            color: #991b1b;
+            border: 1px solid rgba(252, 165, 165, 0.6);
+        }
+        .badge-flagged {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #f87171;
+            font-weight: 700;
+        }
+        .btn-sm {
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
+        }
+        .table-empty-state, .table-loading-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+        .spinner {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(196, 181, 253, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Toast notification */
+        #toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 360px;
+            pointer-events: none;
+        }
+        .toast {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border-radius: 10px;
+            padding: 0.9rem 1.2rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+            border-left: 4px solid var(--primary);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            transition: all 0.3s ease;
+            animation: slideIn 0.25s ease-out;
+        }
+        .toast-success { border-left-color: #10b981; }
+        .toast-error { border-left-color: #ef4444; }
+        .toast-warning { border-left-color: #f59e0b; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        /* Modal dialog */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-content {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 1.75rem;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes modalPop {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-light);
+            margin-top: 1rem;
+            font-size: 0.88rem;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
 
     <div id="navbar-container"></div>
+    <div id="toast-container"></div>
+
+    <!-- Confirmation & Input Modal -->
+    <div id="admin-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title" style="margin-bottom: 0.5rem;">Confirm Action</h3>
+            <p id="modal-description" class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.25rem;"></p>
+            <div id="modal-body-custom"></div>
+            <div class="flex items-center justify-end gap-3" style="margin-top: 1.5rem;">
+                <button id="modal-btn-cancel" class="btn btn-outline btn-sm">Cancel</button>
+                <button id="modal-btn-confirm" class="btn btn-primary btn-sm">Confirm</button>
+            </div>
+        </div>
+    </div>
 
     <main class="container" style="padding: 3rem 1.5rem;">
-        <div class="flex items-center justify-between" style="margin-bottom: 2rem;">
+        <div class="flex items-center justify-between" style="margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
             <div>
                 <h2>Admin Governance Console</h2>
-                <p class="text-muted">Monitor platform activity, manage user verifications, and moderate job posts.</p>
+                <p class="text-muted">Real-time system telemetry, worker verification management, and job post moderation.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="btn-refresh-all" class="btn btn-outline btn-sm" onclick="loadAllAdminData()">
+                    <svg class="icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    Refresh Telemetry
+                </button>
             </div>
         </div>
 
@@ -43,8 +177,9 @@
                     <svg class="icon text-primary" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
                 </div>
                 <div>
-                    <span class="text-muted" style="font-size: 0.85rem;">Total Users</span>
-                    <h3 id="metric-users" style="margin: 0; font-size: 1.6rem;">7</h3>
+                    <span class="text-muted" style="font-size: 0.85rem;">Platform Users</span>
+                    <h3 id="metric-users" style="margin: 0; font-size: 1.6rem;">--</h3>
+                    <small id="metric-users-breakdown" class="text-muted" style="font-size: 0.75rem;">Loading...</small>
                 </div>
             </div>
 
@@ -54,129 +189,565 @@
                 </div>
                 <div>
                     <span class="text-muted" style="font-size: 0.85rem;">Active Jobs</span>
-                    <h3 id="metric-jobs" style="margin: 0; font-size: 1.6rem;">3</h3>
+                    <h3 id="metric-jobs" style="margin: 0; font-size: 1.6rem;">--</h3>
+                    <small id="metric-jobs-breakdown" class="text-muted" style="font-size: 0.75rem;">Loading...</small>
                 </div>
             </div>
 
             <div class="glass-card flex items-center gap-4">
                 <div style="width: 50px; height: 50px; border-radius: 12px; background: rgba(110, 231, 183, 0.3); display: flex; align-items: center; justify-content: center;">
-                    <svg class="icon" style="color: var(--success);" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    <svg class="icon" style="color: #059669;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 </div>
                 <div>
                     <span class="text-muted" style="font-size: 0.85rem;">Verified Workers</span>
-                    <h3 id="metric-workers" style="margin: 0; font-size: 1.6rem;">6</h3>
+                    <h3 id="metric-workers" style="margin: 0; font-size: 1.6rem;">--</h3>
+                    <small id="metric-workers-breakdown" class="text-muted" style="font-size: 0.75rem;">Loading...</small>
                 </div>
             </div>
 
             <div class="glass-card flex items-center gap-4">
                 <div style="width: 50px; height: 50px; border-radius: 12px; background: rgba(252, 211, 77, 0.3); display: flex; align-items: center; justify-content: center;">
-                    <svg class="icon" style="color: var(--warning);" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    <svg class="icon" style="color: #d97706;" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                 </div>
                 <div>
                     <span class="text-muted" style="font-size: 0.85rem;">Platform Revenue</span>
-                    <h3 style="margin: 0; font-size: 1.6rem;">₹12,450</h3>
+                    <h3 id="metric-revenue" style="margin: 0; font-size: 1.6rem;">₹0</h3>
+                    <small id="metric-escrow-balance" class="text-muted" style="font-size: 0.75rem;">Escrow: ₹0</small>
                 </div>
             </div>
         </div>
 
-        <!-- Users Table -->
+        <!-- Users Table Card -->
         <div class="glass-card" style="margin-bottom: 3rem;">
-            <h3 style="margin-bottom: 1rem;">Platform Users</h3>
+            <div class="flex items-center justify-between" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h3 style="margin-bottom: 0.25rem;">Platform Users</h3>
+                    <span id="users-subtitle" class="text-muted" style="font-size: 0.85rem;">Manage accounts and verification credentials</span>
+                </div>
+                <div class="flex items-center gap-3" style="flex-wrap: wrap;">
+                    <input type="text" id="user-search-input" class="input-control" placeholder="Search name, email, phone..." style="width: 240px; padding: 0.45rem 0.85rem; font-size: 0.85rem;">
+                    <select id="user-role-filter" class="input-control" style="width: 140px; padding: 0.45rem 0.85rem; font-size: 0.85rem;">
+                        <option value="">All Roles</option>
+                        <option value="WORKER">Workers</option>
+                        <option value="CUSTOMER">Customers</option>
+                        <option value="ADMIN">Admins</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="applyUserFilter()">Search</button>
+                </div>
+            </div>
+
             <div style="overflow-x: auto;">
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Email</th>
+                            <th>User</th>
                             <th>Role</th>
-                            <th>Category</th>
+                            <th>Category / Business</th>
+                            <th>Verification</th>
                             <th>Rating</th>
-                            <th>Action</th>
+                            <th>Created</th>
+                            <th style="text-align: right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="users-table-body">
-                        <!-- Populated via JS -->
+                        <tr>
+                            <td colspan="7" class="table-loading-state">
+                                <div class="spinner"></div>
+                                <p style="margin-top: 0.75rem;">Loading user accounts from database...</p>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
+
+            <div class="pagination-bar" id="users-pagination-bar" style="display: none;">
+                <span id="users-pagination-info">Showing page 1</span>
+                <div class="flex items-center gap-2">
+                    <button id="btn-users-prev" class="btn btn-outline btn-sm" onclick="changeUserPage(-1)">Previous</button>
+                    <span id="users-page-indicator" style="font-weight: 600; padding: 0 0.5rem;">1</span>
+                    <button id="btn-users-next" class="btn btn-outline btn-sm" onclick="changeUserPage(1)">Next</button>
+                </div>
+            </div>
         </div>
 
-        <!-- Jobs Moderation Table -->
+        <!-- Jobs Moderation Table Card -->
         <div class="glass-card">
-            <h3 style="margin-bottom: 1rem;">Recent Job Requests</h3>
+            <div class="flex items-center justify-between" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h3 style="margin-bottom: 0.25rem;">Recent Service Requests</h3>
+                    <span id="jobs-subtitle" class="text-muted" style="font-size: 0.85rem;">Moderate job posts, review flagged listings, and maintain community standards</span>
+                </div>
+                <div class="flex items-center gap-3" style="flex-wrap: wrap;">
+                    <select id="jobs-flag-filter" class="input-control" style="width: 160px; padding: 0.45rem 0.85rem; font-size: 0.85rem;" onchange="loadAdminJobs()">
+                        <option value="">All Listings</option>
+                        <option value="true">Flagged Only</option>
+                        <option value="false">Unflagged Only</option>
+                    </select>
+                </div>
+            </div>
+
             <div style="overflow-x: auto;">
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th>Title</th>
+                            <th>Service Title</th>
                             <th>Category</th>
                             <th>Customer</th>
                             <th>Budget</th>
                             <th>Status</th>
-                            <th>Action</th>
+                            <th>Flag Status</th>
+                            <th style="text-align: right;">Moderation</th>
                         </tr>
                     </thead>
                     <tbody id="jobs-table-body">
-                        <!-- Populated via JS -->
+                        <tr>
+                            <td colspan="7" class="table-loading-state">
+                                <div class="spinner"></div>
+                                <p style="margin-top: 0.75rem;">Loading job posts from database...</p>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </main>
 
-    <script src="../js/data.js"></script>
+    <!-- Load API client first, then main application shell -->
+    <script src="../js/api.js"></script>
     <script src="../js/app.js"></script>
     <script>
+        // State management
+        let currentUserPage = 1;
+        const userPageLimit = 10;
+        let totalUserPages = 1;
+
+        // UI Toast helper
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <span>${escapeHTML(message)}</span>
+                <button style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text-muted);" onclick="this.parentElement.remove()">×</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Custom Modal helper
+        function openModal({ title, description, customHtml = '', onConfirm }) {
+            const modal = document.getElementById('admin-modal');
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-description').textContent = description;
+            const customContainer = document.getElementById('modal-body-custom');
+            customContainer.innerHTML = customHtml;
+
+            const confirmBtn = document.getElementById('modal-btn-confirm');
+            const cancelBtn = document.getElementById('modal-btn-cancel');
+
+            modal.style.display = 'flex';
+
+            const cleanup = () => {
+                modal.style.display = 'none';
+                confirmBtn.onclick = null;
+                cancelBtn.onclick = null;
+            };
+
+            cancelBtn.onclick = cleanup;
+            confirmBtn.onclick = async () => {
+                confirmBtn.disabled = true;
+                try {
+                    await onConfirm();
+                    cleanup();
+                } catch (err) {
+                    showToast(err.message || 'Action failed', 'error');
+                } finally {
+                    confirmBtn.disabled = false;
+                }
+            };
+        }
+
+        // Authentication guard
+        function checkAdminAuth() {
+            const user = window.localHireApp ? window.localHireApp.getCurrentUser() : null;
+            const token = window.sessionStorage ? window.sessionStorage.getItem('localHire_token') : null;
+
+            if (!user || user.role !== 'Admin' || !token) {
+                showToast('Administrator privileges required. Redirecting to login...', 'error');
+                setTimeout(() => {
+                    window.location.href = './auth.html';
+                }, 1000);
+                return false;
+            }
+            return true;
+        }
+
+        // 1. Load Metrics Telemetry
+        async function loadAdminMetrics() {
+            try {
+                const metrics = await window.localHireAPI.getAdminMetrics();
+
+                document.getElementById('metric-users').textContent = metrics.totalUsers ?? 0;
+                document.getElementById('metric-users-breakdown').textContent = 
+                    `${metrics.totalWorkers || 0} Workers · ${metrics.totalCustomers || 0} Customers`;
+
+                document.getElementById('metric-jobs').textContent = metrics.activeJobs ?? 0;
+                document.getElementById('metric-jobs-breakdown').textContent = 
+                    `${metrics.totalJobs || 0} total posts · ${metrics.completedJobs || 0} completed`;
+
+                document.getElementById('metric-workers').textContent = metrics.verifiedWorkers ?? 0;
+                const pct = metrics.totalWorkers > 0 ? Math.round(((metrics.verifiedWorkers || 0) / metrics.totalWorkers) * 100) : 0;
+                document.getElementById('metric-workers-breakdown').textContent = `${pct}% of worker fleet verified`;
+
+                const rev = Number(metrics.platformRevenue || metrics.revenue || 0);
+                document.getElementById('metric-revenue').textContent = `₹${rev.toLocaleString('en-IN')}`;
+                const escrowHeld = Number(metrics.heldInEscrow || metrics.escrowBalance || 0);
+                document.getElementById('metric-escrow-balance').textContent = 
+                    `Escrow held: ₹${escrowHeld.toLocaleString('en-IN')}`;
+
+            } catch (err) {
+                console.error('[Admin] Metrics load failed:', err);
+                showToast('Failed to load real-time metrics: ' + err.message, 'error');
+            }
+        }
+
+        // 2. Load Users Table
+        async function loadAdminUsers(page = 1) {
+            currentUserPage = page;
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="table-loading-state">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 0.75rem;">Fetching page ${page}...</p>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const search = document.getElementById('user-search-input').value.trim();
+                const role = document.getElementById('user-role-filter').value;
+
+                const response = await window.localHireAPI.getAdminUsers({
+                    page: currentUserPage,
+                    limit: userPageLimit,
+                    search,
+                    role
+                });
+
+                const users = response.users || [];
+                const total = response.total ?? users.length;
+                totalUserPages = response.totalPages || 1;
+
+                document.getElementById('users-subtitle').textContent = `Managing ${total} registered user accounts`;
+
+                if (users.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="table-empty-state">
+                                <svg class="icon" viewBox="0 0 24 24" style="width: 36px; height: 36px; opacity: 0.4; margin-bottom: 0.5rem;"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                <p>No user accounts matched the filter criteria.</p>
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('users-pagination-bar').style.display = 'none';
+                    return;
+                }
+
+                tbody.innerHTML = users.map(u => {
+                    const badgeRoleClass = u.role === 'Worker' ? 'badge-primary' : (u.role === 'Admin' ? 'badge-primary' : '');
+                    
+                    let vBadge = '<span class="badge">Unverified</span>';
+                    if (u.verificationStatus === 'VERIFIED') {
+                        vBadge = '<span class="badge badge-verified">✓ Verified</span>';
+                    } else if (u.verificationStatus === 'PENDING_REVIEW') {
+                        vBadge = '<span class="badge badge-pending">Pending Review</span>';
+                    } else if (u.verificationStatus === 'REJECTED') {
+                        vBadge = '<span class="badge badge-rejected">Rejected</span>';
+                    }
+
+                    const ratingDisplay = u.rating ? `${u.rating.toFixed(1)} ★` : '<span class="text-muted">N/A</span>';
+                    const categoryDisplay = u.category !== 'N/A' 
+                        ? `${escapeHTML(u.category)}${u.businessName ? ` <small class="text-muted">(${escapeHTML(u.businessName)})</small>` : ''}` 
+                        : '<span class="text-muted">Customer</span>';
+
+                    const createdDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A';
+
+                    return `
+                        <tr>
+                            <td>
+                                <div>
+                                    <strong>${escapeHTML(u.name)}</strong>
+                                    <div class="text-muted" style="font-size: 0.8rem;">${escapeHTML(u.email)}</div>
+                                </div>
+                            </td>
+                            <td><span class="badge ${badgeRoleClass}">${escapeHTML(u.role)}</span></td>
+                            <td>${categoryDisplay}</td>
+                            <td>${vBadge}</td>
+                            <td>${ratingDisplay}</td>
+                            <td><span class="text-muted" style="font-size: 0.8rem;">${createdDate}</span></td>
+                            <td style="text-align: right;">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button class="btn btn-outline btn-sm" onclick="promptVerifyUser('${u.id}', '${escapeHTML(u.name)}', '${u.verificationStatus}')" title="Update Verification">
+                                        Verify
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" onclick="promptDeleteUser('${u.id}', '${escapeHTML(u.name)}')" title="Delete Account">
+                                        Remove
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Update pagination controls
+                const pBar = document.getElementById('users-pagination-bar');
+                pBar.style.display = totalUserPages > 1 ? 'flex' : 'none';
+                document.getElementById('users-pagination-info').textContent = 
+                    `Showing ${(currentUserPage - 1) * userPageLimit + 1} - ${Math.min(currentUserPage * userPageLimit, total)} of ${total} users`;
+                document.getElementById('users-page-indicator').textContent = `${currentUserPage} / ${totalUserPages}`;
+                document.getElementById('btn-users-prev').disabled = currentUserPage <= 1;
+                document.getElementById('btn-users-next').disabled = currentUserPage >= totalUserPages;
+
+            } catch (err) {
+                console.error('[Admin] Users load failed:', err);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="table-empty-state" style="color: #ef4444;">
+                            Failed to load users: ${escapeHTML(err.message)}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function applyUserFilter() {
+            currentUserPage = 1;
+            loadAdminUsers(1);
+        }
+
+        function changeUserPage(delta) {
+            const newPage = currentUserPage + delta;
+            if (newPage >= 1 && newPage <= totalUserPages) {
+                loadAdminUsers(newPage);
+            }
+        }
+
+        // Prompt User Verification
+        function promptVerifyUser(userId, userName, currentStatus) {
+            openModal({
+                title: `Verify ${userName}`,
+                description: `Set verification status and credentials for this account.`,
+                customHtml: `
+                    <div class="input-group">
+                        <label class="input-label">Verification Status</label>
+                        <select id="modal-verify-status" class="input-control">
+                            <option value="VERIFIED" ${currentStatus === 'VERIFIED' ? 'selected' : ''}>VERIFIED (Approved)</option>
+                            <option value="PENDING_REVIEW" ${currentStatus === 'PENDING_REVIEW' ? 'selected' : ''}>PENDING_REVIEW (Needs Follow-up)</option>
+                            <option value="UNVERIFIED" ${currentStatus === 'UNVERIFIED' ? 'selected' : ''}>UNVERIFIED</option>
+                            <option value="REJECTED" ${currentStatus === 'REJECTED' ? 'selected' : ''}>REJECTED (Declined)</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label class="input-label">Audit Note / Reason</label>
+                        <input type="text" id="modal-verify-notes" class="input-control" placeholder="e.g. Identity documents and insurance verified">
+                    </div>
+                `,
+                onConfirm: async () => {
+                    const status = document.getElementById('modal-verify-status').value;
+                    const notes = document.getElementById('modal-verify-notes').value.trim();
+
+                    await window.localHireAPI.verifyAdminUser(userId, status, notes);
+                    showToast(`Updated verification status for ${userName} to ${status}`, 'success');
+                    loadAdminUsers(currentUserPage);
+                    loadAdminMetrics();
+                }
+            });
+        }
+
+        // Prompt User Deletion
+        function promptDeleteUser(userId, userName) {
+            openModal({
+                title: `Remove ${userName}?`,
+                description: `Are you sure you want to delete this user account? All associated profile data will be permanently purged. This action is logged in administrative audit trails.`,
+                onConfirm: async () => {
+                    await window.localHireAPI.deleteAdminUser(userId);
+                    showToast(`User ${userName} successfully deleted`, 'success');
+                    loadAdminUsers(currentUserPage);
+                    loadAdminMetrics();
+                }
+            });
+        }
+
+        // 3. Load Jobs Moderation Table
+        async function loadAdminJobs() {
+            const tbody = document.getElementById('jobs-table-body');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="table-loading-state">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 0.75rem;">Loading job posts...</p>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const flagFilter = document.getElementById('jobs-flag-filter').value;
+                const params = {};
+                if (flagFilter !== '') {
+                    params.isFlagged = flagFilter;
+                }
+
+                const response = await window.localHireAPI.getAdminJobs(params);
+                const jobs = response.jobs || [];
+
+                document.getElementById('jobs-subtitle').textContent = `Reviewing ${response.total || jobs.length} listings in database`;
+
+                if (jobs.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="table-empty-state">
+                                <p>No job listings found matching the current moderation filter.</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = jobs.map(j => {
+                    const flagBadge = j.isFlagged
+                        ? `<span class="badge badge-flagged" title="${escapeHTML(j.flagReason || 'Flagged by admin')}">⚠️ Flagged: ${escapeHTML(j.flagReason || 'Review')}</span>`
+                        : `<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #065f46;">Clean</span>`;
+
+                    const flagBtnLabel = j.isFlagged ? 'Unflag' : 'Flag';
+                    const flagBtnStyle = j.isFlagged 
+                        ? 'color: #059669; border-color: rgba(5, 150, 105, 0.4);' 
+                        : 'color: #d97706; border-color: rgba(217, 119, 6, 0.4);';
+
+                    return `
+                        <tr>
+                            <td>
+                                <div>
+                                    <strong>${escapeHTML(j.title)}</strong>
+                                    <div class="text-muted" style="font-size: 0.8rem;">${escapeHTML(j.description ? j.description.slice(0, 60) + '...' : '')}</div>
+                                </div>
+                            </td>
+                            <td>${escapeHTML(j.category)}</td>
+                            <td>
+                                <div>
+                                    ${escapeHTML(j.customerName)}
+                                    <div class="text-muted" style="font-size: 0.75rem;">${escapeHTML(j.customerEmail || '')}</div>
+                                </div>
+                            </td>
+                            <td><strong>${escapeHTML(j.budget)}</strong></td>
+                            <td><span class="badge badge-primary">${escapeHTML(j.status)}</span></td>
+                            <td>${flagBadge}</td>
+                            <td style="text-align: right;">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button class="btn btn-outline btn-sm" style="${flagBtnStyle}" onclick="promptFlagJob('${j.id}', '${escapeHTML(j.title)}', ${j.isFlagged})">
+                                        ${flagBtnLabel}
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" onclick="promptDeleteJob('${j.id}', '${escapeHTML(j.title)}')">
+                                        Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error('[Admin] Jobs load failed:', err);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="table-empty-state" style="color: #ef4444;">
+                            Failed to load jobs: ${escapeHTML(err.message)}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Prompt Job Flagging
+        function promptFlagJob(jobId, jobTitle, isCurrentlyFlagged) {
+            if (isCurrentlyFlagged) {
+                openModal({
+                    title: `Unflag Job Post`,
+                    description: `Remove moderation flag from "${jobTitle}" and restore standard platform visibility?`,
+                    onConfirm: async () => {
+                        await window.localHireAPI.flagAdminJob(jobId, '', false);
+                        showToast(`Flag removed from "${jobTitle}"`, 'success');
+                        loadAdminJobs();
+                        loadAdminMetrics();
+                    }
+                });
+            } else {
+                openModal({
+                    title: `Flag Job Post`,
+                    description: `Flag "${jobTitle}" for community standards review. This writes an administrative audit log row.`,
+                    customHtml: `
+                        <div class="input-group">
+                            <label class="input-label">Reason for Flagging</label>
+                            <input type="text" id="modal-flag-reason" class="input-control" placeholder="e.g. Inappropriate description, prohibited service request" value="Inappropriate content or terms violation">
+                        </div>
+                    `,
+                    onConfirm: async () => {
+                        const reason = document.getElementById('modal-flag-reason').value.trim();
+                        await window.localHireAPI.flagAdminJob(jobId, reason, true);
+                        showToast(`Job "${jobTitle}" flagged for review`, 'warning');
+                        loadAdminJobs();
+                        loadAdminMetrics();
+                    }
+                });
+            }
+        }
+
+        // Prompt Job Deletion
+        function promptDeleteJob(jobId, jobTitle) {
+            openModal({
+                title: `Delete Job Post?`,
+                description: `Permanently remove "${jobTitle}" from the marketplace? This action cannot be undone.`,
+                onConfirm: async () => {
+                    await window.localHireAPI.deleteAdminJob(jobId);
+                    showToast(`Job "${jobTitle}" removed successfully`, 'success');
+                    loadAdminJobs();
+                    loadAdminMetrics();
+                }
+            });
+        }
+
+        // Master loader
+        async function loadAllAdminData() {
+            if (!checkAdminAuth()) return;
+            await Promise.all([
+                loadAdminMetrics(),
+                loadAdminUsers(1),
+                loadAdminJobs()
+            ]);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             renderNavbar('navbar-container', 'pages');
 
-            const currentUser = window.localHireApp ? window.localHireApp.getCurrentUser() : null;
-            if (!currentUser || currentUser.role !== 'Admin') {
-                alert('Access denied. Administrator privileges required.');
-                window.location.href = '../index.html';
-                return;
+            // Listen for enter key in user search box
+            const searchInput = document.getElementById('user-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') applyUserFilter();
+                });
             }
 
-            const users = window.localHireApp.getUsers();
-            const jobs = window.localHireApp.getJobs();
+            // Listen for role filter change
+            const roleFilter = document.getElementById('user-role-filter');
+            if (roleFilter) {
+                roleFilter.addEventListener('change', () => applyUserFilter());
+            }
 
-            document.getElementById('metric-users').textContent = users.length;
-            document.getElementById('metric-jobs').textContent = jobs.length;
-            document.getElementById('metric-workers').textContent = users.filter(u => u.role === 'Worker').length;
-
-            // Populate Users
-            const usersTbody = document.getElementById('users-table-body');
-            users.forEach(u => {
-                usersTbody.innerHTML += `
-                    <tr>
-                        <td><strong>${escapeHTML(u.name)}</strong></td>
-                        <td>${escapeHTML(u.email)}</td>
-                        <td><span class="badge ${u.role === 'Worker' ? 'badge-primary' : ''}">${escapeHTML(u.role)}</span></td>
-                        <td>${escapeHTML(u.category || 'N/A')}</td>
-                        <td>${u.rating ? escapeHTML(u.rating) + '★' : 'N/A'}</td>
-                        <td>
-                            <button class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="alert('User status updated')">Verify</button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            // Populate Jobs
-            const jobsTbody = document.getElementById('jobs-table-body');
-            jobs.forEach(j => {
-                jobsTbody.innerHTML += `
-                    <tr>
-                        <td><strong>${escapeHTML(j.title)}</strong></td>
-                        <td>${escapeHTML(j.category)}</td>
-                        <td>${escapeHTML(j.customerName)}</td>
-                        <td>${escapeHTML(j.budget)}</td>
-                        <td><span class="badge badge-primary">${escapeHTML(j.status)}</span></td>
-                        <td>
-                            <button class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; color: var(--danger); border-color: var(--danger);" onclick="alert('Job flagged for review')">Flag</button>
-                        </td>
-                    </tr>
-                `;
-            });
+            loadAllAdminData();
         });
     </script>
 </body>
