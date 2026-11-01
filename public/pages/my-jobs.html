@@ -243,6 +243,7 @@
             function createBookingCard(booking, role) {
                 const isWorker = role === 'Worker';
                 const otherPerson = isWorker ? booking.customer : booking.worker;
+                const otherUserId = otherPerson ? (otherPerson.id || otherPerson._id || (isWorker ? booking.customerId : booking.workerId)) : (isWorker ? booking.customerId : booking.workerId);
                 const rawName = otherPerson ? otherPerson.name : (isWorker ? 'Customer' : 'Professional');
                 const otherName = escapeHTML(rawName);
                 const otherAvatar = otherPerson && otherPerson.avatarUrl ? escapeHTML(otherPerson.avatarUrl) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(rawName)}`;
@@ -474,10 +475,11 @@
 
                         <div class="flex items-center gap-3" style="padding: 0.5rem 0;">
                             <img src="${otherAvatar}" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover;">
-                            <div style="font-size: 0.85rem; line-height: 1.4;">
+                            <div style="font-size: 0.85rem; line-height: 1.4; flex: 1;">
                                 <strong style="color: var(--text-main); display: block;">${otherName}</strong>
                                 <span class="text-muted">${safeSubtitle}</span>
                             </div>
+                            ${otherUserId ? `<button class="btn btn-outline" onclick="window.location.href='chat.html?user=${encodeURIComponent(otherUserId)}'" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">💬 Chat</button>` : ''}
                         </div>
 
                         <div class="flex flex-col gap-2" style="font-size: 0.85rem; background: rgba(0,0,0,0.03); padding: 0.75rem; border-radius: 8px;">

@@ -224,6 +224,10 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   console.log(`[Socket] User connected: ${socket.id}`);
 
+  if (socket.user?.id) {
+    socket.join(`user:${socket.user.id}`);
+  }
+
   socket.on('join_room', async (roomId) => {
     if (!roomId || typeof roomId !== 'string') {
       socket.emit('chat:error', { message: 'Invalid chat room reference.' });
@@ -307,6 +311,8 @@ io.on('connection', (socket) => {
       };
 
       io.to(data.roomId).emit('receive_message', payload);
+      io.to(`user:${senderId}`).emit('conversation:updated', { conversationId: conversation.id, message: payload });
+      io.to(`user:${otherUserId}`).emit('conversation:updated', { conversationId: conversation.id, message: payload });
     } catch (error) {
       console.error('[Socket Chat] Message save failed:', error);
       socket.emit('chat:error', { message: 'Failed to send message. Please try again.' });

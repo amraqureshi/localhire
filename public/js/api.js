@@ -857,6 +857,55 @@ window.localHireAPI = {
     }
   },
 
+  getConversations: async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { success: true, conversations: data.conversations || [], count: data.count || 0 };
+      }
+      return { success: false, conversations: [], message: data.message || 'Unable to load conversations.' };
+    } catch (err) {
+      console.warn('[API Client] Backend unavailable while loading conversations.');
+      return { success: false, conversations: [], message: 'Unable to reach the LocalHire server.' };
+    }
+  },
+
+  markConversationAsRead: async (conversationIdOrUserId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/conversations/${conversationIdOrUserId}/read`, {
+        method: 'PATCH',
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { success: true, markedCount: data.markedCount };
+      }
+      return { success: false, message: data.message };
+    } catch (err) {
+      console.warn('[API Client] Error marking conversation as read:', err.message);
+      return { success: false, message: 'Unable to reach the LocalHire server.' };
+    }
+  },
+
+  getChatUser: async (userId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/user/${userId}`, {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { success: true, user: data.user };
+      }
+      return { success: false, message: data.message || 'User not found.' };
+    } catch (err) {
+      console.warn('[API Client] Error fetching chat user info:', err.message);
+      return { success: false, message: 'Unable to reach the LocalHire server.' };
+    }
+  },
+
   // Reviews
   createReview: async (jobId, workerId, rating, comment) => {
     try {

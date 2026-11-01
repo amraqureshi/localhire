@@ -12,3 +12,4 @@ ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "verificationStatus" "VerificationSt
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "JobPost_isFlagged_idx" ON "JobPost"("isFlagged");
 CREATE INDEX IF NOT EXISTS "User_verificationStatus_idx" ON "User"("verificationStatus");
+

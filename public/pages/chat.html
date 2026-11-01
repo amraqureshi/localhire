@@ -10,21 +10,100 @@
             display: flex;
             height: calc(100vh - 120px);
             gap: 1.5rem;
-            padding: 1.5rem;
+            padding: 1.5rem 0;
         }
         .chat-sidebar {
-            width: 320px;
+            width: 340px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.75rem;
             overflow-y: auto;
+            border-radius: 16px;
         }
         .chat-main {
             flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            border-radius: 16px;
+        }
+        .conversation-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.4);
+        }
+        .conversation-item:hover {
+            background: rgba(255, 255, 255, 0.85);
+            transform: translateX(2px);
+        }
+        .conversation-item.active {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: var(--primary);
+            box-shadow: 0 4px 15px rgba(196, 181, 253, 0.3);
+        }
+        .conv-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1rem;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .conv-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .conv-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .conv-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2px;
+        }
+        .conv-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .conv-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .conv-preview {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .conv-unread {
+            background: #8b5cf6;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 9999px;
+            margin-left: 6px;
         }
         .chat-messages {
             flex: 1;
@@ -40,6 +119,12 @@
             border-radius: 18px;
             font-size: 0.95rem;
             line-height: 1.5;
+            word-break: break-word;
+            animation: fadeIn 0.15s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .msg-mine {
             align-self: flex-end;
@@ -50,10 +135,28 @@
         }
         .msg-other {
             align-self: flex-start;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.9);
             color: var(--text-main);
             border-bottom-left-radius: 4px;
             border: 1px solid var(--border-light);
+        }
+        .msg-meta {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 4px;
+            text-align: right;
+        }
+        .spinner {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(196, 181, 253, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -61,39 +164,52 @@
 
     <div id="navbar-container"></div>
 
-    <div class="container" style="max-width: 1200px;">
+    <div class="container" style="max-width: 1240px;">
         <div class="chat-container">
             <!-- Sidebar: Active Conversations -->
             <div class="glass-card chat-sidebar">
-                <h3 style="margin-bottom: 0.5rem; font-size: 1.2rem;">Messages</h3>
-                <div id="conversations-list" class="flex flex-col gap-2">
-                    <p class="text-muted" style="font-size: 0.9rem; text-align: center; padding: 2rem 0;">Select a worker or customer from their profile to start chatting.</p>
+                <div class="flex items-center justify-between" style="padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-light);">
+                    <h3 style="margin: 0; font-size: 1.15rem;">Messages</h3>
+                    <span id="unread-total-badge" class="badge" style="display: none; background: rgba(139, 92, 246, 0.15); color: #7c3aed; font-weight: 700;">0 unread</span>
+                </div>
+                
+                <div id="conversations-list" class="flex flex-col gap-2" style="flex: 1;">
+                    <!-- Loaded dynamically -->
+                    <div style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 0.75rem; font-size: 0.88rem;">Loading conversations...</p>
+                    </div>
                 </div>
             </div>
 
             <!-- Main Chat Area -->
             <div class="glass-card chat-main" style="padding: 0;">
-                <div class="flex items-center justify-between" style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-light);">
+                <!-- Header -->
+                <div class="flex items-center justify-between" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-light); background: rgba(255, 255, 255, 0.5);">
                     <div class="flex items-center gap-3">
-                        <div id="chat-avatar-placeholder" style="width: 42px; height: 42px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #1e293b;">?</div>
+                        <div id="chat-header-avatar" class="conv-avatar" style="width: 44px; height: 44px;">
+                            <span>?</span>
+                        </div>
                         <div>
-                            <h4 id="chat-header-name" style="margin: 0; font-size: 1.1rem;">Direct Conversation</h4>
-                            <span id="chat-header-status" class="text-muted" style="font-size: 0.8rem;">Online</span>
+                            <h4 id="chat-header-name" style="margin: 0; font-size: 1.05rem;">Select a Conversation</h4>
+                            <span id="chat-header-subtitle" class="text-muted" style="font-size: 0.8rem;">Direct messaging</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- Messages container -->
                 <div class="chat-messages" id="messages-container">
                     <div style="text-align: center; color: var(--text-muted); margin: auto;">
-                        <svg class="icon" style="width: 48px; height: 48px; margin-bottom: 0.5rem;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <svg class="icon" style="width: 44px; height: 44px; margin-bottom: 0.5rem; opacity: 0.5;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                         <p>No active message thread selected.</p>
+                        <small style="font-size: 0.8rem;">Select a thread on the left or open chat from your active bookings.</small>
                     </div>
                 </div>
 
                 <!-- Input Box -->
                 <form id="chat-form" class="flex gap-2" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-light); background: rgba(255, 255, 255, 0.4);">
-                    <input type="text" id="chat-input" class="input-control" placeholder="Type a message..." required style="border-radius: 9999px; padding-left: 1.25rem;">
-                    <button type="submit" class="btn btn-primary" style="border-radius: 50%; aspect-ratio: 1; padding: 0.8rem; flex-shrink: 0;">
+                    <input type="text" id="chat-input" class="input-control" placeholder="Type a message..." required disabled style="border-radius: 9999px; padding-left: 1.25rem;">
+                    <button type="submit" id="chat-submit-btn" class="btn btn-primary" disabled style="border-radius: 50%; aspect-ratio: 1; padding: 0.8rem; flex-shrink: 0;">
                         <svg class="icon" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
                 </form>
@@ -110,7 +226,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             renderNavbar('navbar-container', 'pages');
 
-            let currentUser = window.localHireApp.getCurrentUser();
+            let currentUser = window.localHireApp ? window.localHireApp.getCurrentUser() : null;
             if (!currentUser) {
                 const sessionUser = await window.localHireAPI.getMe();
                 currentUser = sessionUser;
@@ -122,47 +238,242 @@
             }
 
             const urlParams = new URLSearchParams(window.location.search);
-            const targetUserId = urlParams.get('userId');
+            let activeUserId = urlParams.get('user') || urlParams.get('userId');
 
+            const convListContainer = document.getElementById('conversations-list');
             const messagesContainer = document.getElementById('messages-container');
             const chatForm = document.getElementById('chat-form');
             const chatInput = document.getElementById('chat-input');
+            const chatSubmitBtn = document.getElementById('chat-submit-btn');
             const headerName = document.getElementById('chat-header-name');
-            const avatarPlaceholder = document.getElementById('chat-avatar-placeholder');
+            const headerSubtitle = document.getElementById('chat-header-subtitle');
+            const headerAvatar = document.getElementById('chat-header-avatar');
+            const unreadTotalBadge = document.getElementById('unread-total-badge');
 
             let socket = null;
             let currentRoom = null;
+            let conversationsData = [];
+            let activeCounterparty = null;
 
+            // Time formatter helper
+            function formatTimestamp(isoString) {
+                if (!isoString) return '';
+                const date = new Date(isoString);
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                if (isToday) {
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+                const yesterday = new Date(now);
+                yesterday.setDate(yesterday.getDate() - 1);
+                if (date.toDateString() === yesterday.toDateString()) {
+                    return 'Yesterday';
+                }
+                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            }
+
+            function getInitials(name) {
+                if (!name) return '?';
+                const parts = name.trim().split(/\s+/);
+                if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+            }
+
+            // Render message bubble
             const renderMessage = (message) => {
-                const isMine = String(message.sender) === String(currentUser.id) || String(message.senderId) === String(currentUser.id);
+                const senderId = message.sender || message.senderId;
+                const isMine = String(senderId) === String(currentUser.id);
                 const bubble = document.createElement('div');
                 bubble.className = `msg-bubble ${isMine ? 'msg-mine' : 'msg-other'}`;
-                bubble.textContent = message.content;
+
+                const timeStr = message.createdAt 
+                    ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    : '';
+
+                bubble.innerHTML = `
+                    <div>${escapeHTML(message.content)}</div>
+                    <div class="msg-meta">${timeStr}</div>
+                `;
                 messagesContainer.appendChild(bubble);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             };
 
-            const loadHistory = async () => {
-                if (!targetUserId) {
-                    messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>Select a customer or worker to continue the conversation.</p></div>';
+            // Render conversations sidebar list
+            function renderConversationsList() {
+                if (!conversationsData || conversationsData.length === 0) {
+                    convListContainer.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 3rem 1rem;">
+                            <svg class="icon" style="width: 36px; height: 36px; opacity: 0.4; margin-bottom: 0.5rem;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            <p style="font-size: 0.9rem; margin-bottom: 0.25rem;">No conversations yet</p>
+                            <small style="font-size: 0.78rem;">Bookings with confirmed workers or customers unlock direct messaging.</small>
+                        </div>
+                    `;
+                    unreadTotalBadge.style.display = 'none';
                     return;
                 }
 
-                const result = await window.localHireAPI.getMessages(targetUserId);
+                let totalUnread = 0;
+
+                convListContainer.innerHTML = conversationsData.map(c => {
+                    const cp = c.counterparty;
+                    const isActive = activeUserId && String(cp.id) === String(activeUserId);
+                    const unread = c.unreadCount || 0;
+                    totalUnread += unread;
+
+                    const avatarHtml = (cp.avatar || cp.avatarUrl)
+                        ? `<img src="${escapeHTML(cp.avatar || cp.avatarUrl)}" alt="${escapeHTML(cp.name)}">`
+                        : `<span>${escapeHTML(getInitials(cp.name))}</span>`;
+
+                    const unreadHtml = unread > 0 ? `<span class="conv-unread">${unread}</span>` : '';
+                    const timeDisplay = formatTimestamp(c.timestamp);
+                    const lastText = c.lastMessageText || (c.lastMessage ? c.lastMessage.content : 'No messages yet');
+
+                    return `
+                        <div class="conversation-item ${isActive ? 'active' : ''}" onclick="selectConversation('${cp.id}')" data-user-id="${cp.id}">
+                            <div class="conv-avatar">
+                                ${avatarHtml}
+                            </div>
+                            <div class="conv-info">
+                                <div class="conv-header">
+                                    <div class="conv-name">${escapeHTML(cp.name)}</div>
+                                    <div class="conv-time">${timeDisplay}</div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="conv-preview">${escapeHTML(lastText)}</div>
+                                    ${unreadHtml}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                if (totalUnread > 0) {
+                    unreadTotalBadge.style.display = 'inline-block';
+                    unreadTotalBadge.textContent = `${totalUnread} unread`;
+                } else {
+                    unreadTotalBadge.style.display = 'none';
+                }
+            }
+
+            // Load conversations from backend
+            async function loadConversations() {
+                try {
+                    const result = await window.localHireAPI.getConversations();
+                    if (result.success) {
+                        conversationsData = result.conversations || [];
+                        renderConversationsList();
+                    } else {
+                        convListContainer.innerHTML = `
+                            <div style="text-align: center; color: #ef4444; padding: 2rem 1rem;">
+                                <p style="font-size: 0.88rem;">Failed to load conversations.</p>
+                                <button class="btn btn-outline btn-sm" style="margin-top: 0.5rem;" onclick="loadConversations()">Retry</button>
+                            </div>
+                        `;
+                    }
+                } catch (err) {
+                    convListContainer.innerHTML = `
+                        <div style="text-align: center; color: #ef4444; padding: 2rem 1rem;">
+                            <p style="font-size: 0.88rem;">Network error loading conversations.</p>
+                            <button class="btn btn-outline btn-sm" style="margin-top: 0.5rem;" onclick="loadConversations()">Retry</button>
+                        </div>
+                    `;
+                }
+            }
+
+            // Select and open a conversation with a counterparty
+            window.selectConversation = async function(userId) {
+                if (!userId) return;
+                activeUserId = String(userId);
+
+                // Update URL without reload
+                const newUrl = new URL(window.location);
+                newUrl.searchParams.set('user', activeUserId);
+                window.history.replaceState({}, '', newUrl);
+
+                // Enable inputs
+                chatInput.disabled = false;
+                chatSubmitBtn.disabled = false;
+
+                // Find in existing list
+                let conv = conversationsData.find(c => String(c.counterparty.id) === activeUserId);
+
+                if (conv) {
+                    activeCounterparty = conv.counterparty;
+                    // Reset unread locally
+                    conv.unreadCount = 0;
+                } else {
+                    // Counterparty not in list yet, fetch user details
+                    const userRes = await window.localHireAPI.getChatUser(activeUserId);
+                    if (userRes.success) {
+                        activeCounterparty = userRes.user;
+                        // Add to list as pending conversation
+                        conversationsData.unshift({
+                          id: 'pending-' + activeUserId,
+                          counterparty: activeCounterparty,
+                          lastMessageText: '',
+                          timestamp: new Date().toISOString(),
+                          unreadCount: 0
+                        });
+                    } else {
+                        activeCounterparty = { id: activeUserId, name: 'User', avatarUrl: null, role: 'User' };
+                    }
+                }
+
+                // Update Header
+                headerName.textContent = activeCounterparty.name || 'User';
+                headerSubtitle.textContent = activeCounterparty.subtitle || activeCounterparty.role || 'Direct conversation';
+                if (activeCounterparty.avatar || activeCounterparty.avatarUrl) {
+                    headerAvatar.innerHTML = `<img src="${escapeHTML(activeCounterparty.avatar || activeCounterparty.avatarUrl)}" alt="${escapeHTML(activeCounterparty.name)}">`;
+                } else {
+                    headerAvatar.innerHTML = `<span>${escapeHTML(getInitials(activeCounterparty.name))}</span>`;
+                }
+
+                renderConversationsList();
+
+                // Join room on Socket.IO
+                currentRoom = [currentUser.id, activeUserId].sort().join('_');
+                if (socket) {
+                    socket.emit('join_room', currentRoom);
+                }
+
+                // Mark as read on backend
+                window.localHireAPI.markConversationAsRead(activeUserId).catch(() => {});
+
+                // Load messages
+                messagesContainer.innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); margin: auto;">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 0.5rem; font-size: 0.88rem;">Loading message history...</p>
+                    </div>
+                `;
+
+                const result = await window.localHireAPI.getMessages(activeUserId);
                 if (!result.success) {
-                    messagesContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>${result.message || 'Unable to load chat history.'}</p></div>`;
+                    messagesContainer.innerHTML = `
+                        <div style="text-align: center; color: #ef4444; margin: auto; max-width: 400px; padding: 1rem;">
+                            <svg class="icon" style="width: 36px; height: 36px; margin-bottom: 0.5rem;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <p style="font-weight: 500;">${escapeHTML(result.message || 'Unable to access this conversation.')}</p>
+                            <small class="text-muted">Chat is permitted only between customers and workers on authorized bookings.</small>
+                        </div>
+                    `;
                     return;
                 }
 
                 messagesContainer.innerHTML = '';
-                if (!result.messages.length) {
-                    messagesContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin: auto;"><p>No messages yet. Start the conversation.</p></div>';
+                if (!result.messages || result.messages.length === 0) {
+                    messagesContainer.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); margin: auto;">
+                            <p>No messages yet in this conversation.</p>
+                            <small>Say hello and coordinate your service details!</small>
+                        </div>
+                    `;
                     return;
                 }
 
                 result.messages.forEach(renderMessage);
             };
 
+            // Setup Socket.IO connection
             try {
                 const token = window.sessionStorage ? window.sessionStorage.getItem('localHire_token') : null;
                 if (token) {
@@ -170,12 +481,48 @@
                     socket = io(socketOrigin, {
                         auth: { token: `Bearer ${token}` }
                     });
-                    socket.on('connect', () => console.log('Connected to chat socket'));
+
+                    socket.on('connect', () => {
+                        console.log('[Socket] Connected to chat service');
+                        if (currentRoom) socket.emit('join_room', currentRoom);
+                    });
+
                     socket.on('receive_message', (data) => {
-                        if (data && data.roomId === currentRoom) {
+                        if (!data) return;
+                        const senderId = String(data.senderId || data.sender);
+                        const receiverId = String(data.receiverId || data.receiver);
+                        const isRelevant = senderId === String(activeUserId) || receiverId === String(activeUserId);
+
+                        if (isRelevant && data.roomId === currentRoom) {
                             renderMessage(data);
+                            // Auto mark as read
+                            window.localHireAPI.markConversationAsRead(activeUserId).catch(() => {});
+                        }
+
+                        // Update or bump conversation in sidebar
+                        const counterpartyId = senderId === String(currentUser.id) ? receiverId : senderId;
+                        const existingConv = conversationsData.find(c => String(c.counterparty.id) === counterpartyId);
+
+                        if (existingConv) {
+                            existingConv.lastMessageText = data.content;
+                            existingConv.timestamp = data.createdAt || new Date().toISOString();
+                            if (counterpartyId !== activeUserId) {
+                                existingConv.unreadCount = (existingConv.unreadCount || 0) + 1;
+                            }
+                            // Move to top
+                            conversationsData = [existingConv, ...conversationsData.filter(c => c !== existingConv)];
+                            renderConversationsList();
+                        } else {
+                            // Reload list to get complete counterparty info
+                            loadConversations();
                         }
                     });
+
+                    socket.on('conversation:updated', (data) => {
+                        // Background update when message arrives on other threads
+                        loadConversations();
+                    });
+
                     socket.on('chat:error', (data) => {
                         if (data && data.message) {
                             alert(data.message);
@@ -183,42 +530,47 @@
                     });
                 }
             } catch (e) {
-                console.warn('Socket server offline');
+                console.warn('Socket server offline:', e.message);
             }
 
-            if (targetUserId) {
-                const targetUser = { name: 'User', avatarUrl: '' };
-                headerName.textContent = targetUser.name;
-                currentRoom = [currentUser.id, targetUserId].sort().join('_');
-
-                if (socket) {
-                    socket.emit('join_room', currentRoom);
-                }
-
-                await loadHistory();
-            }
-
+            // Chat send submit
             chatForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const text = chatInput.value.trim();
-                if (!text || !targetUserId) return;
+                if (!text || !activeUserId) return;
 
-                if (socket && currentRoom) {
+                chatInput.value = '';
+
+                if (socket && socket.connected && currentRoom) {
                     socket.emit('send_message', {
                         roomId: currentRoom,
                         content: text
                     });
                 } else {
-                    const result = await window.localHireAPI.sendMessage(targetUserId, text);
+                    const result = await window.localHireAPI.sendMessage(activeUserId, text);
                     if (result.success) {
                         renderMessage(result.message);
+                        // Update local conversation preview
+                        const conv = conversationsData.find(c => String(c.counterparty.id) === activeUserId);
+                        if (conv) {
+                            conv.lastMessageText = text;
+                            conv.timestamp = new Date().toISOString();
+                            conversationsData = [conv, ...conversationsData.filter(c => c !== conv)];
+                            renderConversationsList();
+                        }
                     } else {
                         alert(result.message || 'Unable to send message.');
                     }
                 }
-
-                chatInput.value = '';
             });
+
+            // Initial load of conversations list
+            await loadConversations();
+
+            // If ?user=<id> was provided in URL, auto-select it
+            if (activeUserId) {
+                await selectConversation(activeUserId);
+            }
         });
     </script>
 </body>
