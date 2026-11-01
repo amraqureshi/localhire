@@ -1,0 +1,11 @@
+{
+  "name": "localhire",
+  "version": "1.0.0",
+  "description": "LocalHire service-booking marketplace",
+  "scripts": {
+    "start": "node -e \"const { spawn } = require('child_process'); spawn('node', ['server/server.js'], { stdio: 'inherit', shell: true }); spawn('node', ['serve.js'], { stdio: 'inherit', shell: true });\"",
+    "start:backend": "cd server && node server.js",
+    "start:frontend": "node serve.js",
+    "test": "cd server && npm test"
+  }
+}
