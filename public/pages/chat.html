@@ -166,7 +166,8 @@
             try {
                 const token = window.sessionStorage ? window.sessionStorage.getItem('localHire_token') : null;
                 if (token) {
-                    socket = io('http://localhost:5000', {
+                    const socketOrigin = (window.location && window.location.origin) ? window.location.origin : undefined;
+                    socket = io(socketOrigin, {
                         auth: { token: `Bearer ${token}` }
                     });
                     socket.on('connect', () => console.log('Connected to chat socket'));

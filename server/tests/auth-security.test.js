@@ -26,8 +26,14 @@ function createStorage() {
   };
 }
 
+function getClientScriptPath(relativePath) {
+  const publicPath = path.join(__dirname, '..', '..', 'public', relativePath);
+  if (fs.existsSync(publicPath)) return publicPath;
+  return path.join(__dirname, '..', '..', relativePath);
+}
+
 function loadBrowserScript(relativePath) {
-  const scriptPath = path.join(__dirname, '..', '..', relativePath);
+  const scriptPath = getClientScriptPath(relativePath);
   const script = fs.readFileSync(scriptPath, 'utf8');
   const context = {
     window: { localHireApp: { getCurrentUser: () => null } },
@@ -223,7 +229,7 @@ test('failed login does not establish an authenticated session', async () => {
     document: { addEventListener: () => {} }
   };
 
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'js', 'api.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(getClientScriptPath(path.join('js', 'api.js')), 'utf8'), context);
 
   const result = await context.window.localHireAPI.login('bad@example.com', 'badpassword');
 
@@ -258,7 +264,7 @@ test('logout clears the client auth state', async () => {
     document: { addEventListener: () => {} }
   };
 
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'js', 'app.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(getClientScriptPath(path.join('js', 'app.js')), 'utf8'), context);
   context.window.handleLogout();
 
   assert.equal(storage.getItem('localHire_session'), null);

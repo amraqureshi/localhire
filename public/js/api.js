@@ -1,7 +1,7 @@
 // LocalHire Centralized API Client Module
 // Uses bearer-token authentication over the real backend and avoids fake localStorage auth fallbacks.
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = (typeof window !== 'undefined' && window.location && window.location.origin) ? `${window.location.origin}/api` : '/api';
 
 const getSessionStorage = () => (window.sessionStorage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null));
 const getLocalStorage = () => (window.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null));
@@ -356,7 +356,8 @@ window.localHireAPI = {
       }
 
       const token = getStoredToken();
-      return window.io('http://localhost:5000', {
+      const socketOrigin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : undefined;
+      return window.io(socketOrigin, {
         auth: { token },
         transports: ['websocket']
       });

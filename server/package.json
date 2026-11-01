@@ -6,21 +6,20 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/",
-    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$p = Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($p) { foreach ($id in $p) { Stop-Process -Id $id -Force } }; node --watch server.js\"",
+    "dev": "nodemon server.js",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "node prisma/seed.js",
-    "db:check": "node scripts/check-db.js",
-    "db:import": "node scripts/import-from-mongodb.js"
+    "db:check": "node scripts/check-db.js"
   },
   "keywords": [
     "localhire",
     "express",
-    "mongodb",
     "socket.io",
-    "geospatial"
+    "postgresql",
+    "prisma"
   ],
   "author": "",
   "license": "ISC",
@@ -33,7 +32,6 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.2",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.23.1",
     "razorpay": "^2.9.8",
@@ -41,6 +39,7 @@
     "ws": "^8.22.1"
   },
   "devDependencies": {
+    "nodemon": "^3.1.14",
     "prisma": "^6.19.3"
   }
 }

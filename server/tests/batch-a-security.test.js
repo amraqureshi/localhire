@@ -140,7 +140,10 @@ test('Batch A: unauthorized user cannot change job status', async () => {
 
 test('Batch A: escapeHTML prevents script execution through dangerous characters', () => {
   const context = { window: {}, document: { addEventListener: () => {} }, console };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'js', 'app.js'), 'utf8'), context);
+  const appPath = fs.existsSync(path.join(__dirname, '..', '..', 'public', 'js', 'app.js'))
+    ? path.join(__dirname, '..', '..', 'public', 'js', 'app.js')
+    : path.join(__dirname, '..', '..', 'js', 'app.js');
+  vm.runInNewContext(fs.readFileSync(appPath, 'utf8'), context);
   const escapeHTML = context.window.escapeHTML;
 
   assert.equal(typeof escapeHTML, 'function');

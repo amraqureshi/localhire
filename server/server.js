@@ -25,8 +25,6 @@ if (!process.env.DATABASE_URL) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const connectDB = require('./config/db');
-
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -568,15 +566,22 @@ app.use('/api/escrow', escrowRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+// ── Static Frontend Serving ──────────────────────────────────────────────────
+const publicDirectory = path.resolve(__dirname, '..', 'public');
+app.use(express.static(publicDirectory));
+
+// Fallback to index.html for client-side navigation
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(publicDirectory, 'index.html'));
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-  try {
-    await connectDB();
-  } catch (dbErr) {
-    console.warn(`[Server] Legacy database connection notice: ${dbErr.message}`);
-  }
-
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`[Server] Port ${PORT} is already in use. Stop the stale process and try again.`);
